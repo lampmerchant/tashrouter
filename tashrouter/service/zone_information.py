@@ -102,14 +102,14 @@ class ZoneInformationService(Service):
     zone_name = datagram.data[7:7 + datagram.data[6]]
     #TODO write the rest of this
   
-  def _get_my_zone(self, router, datagram, rx_port):
+  def _get_my_zone(self, router, datagram):
     _, _, tid, _, _, start_index = struct.unpack('>BBHBBH', datagram.data)
     if start_index != 0: return
     #TODO where should I be getting the local network from - datagram source or receive port?
-    zone_name = next(router.zone_information_table.zones_in_network(datagram.source_network or rx_port.network), None)
+    zone_name = next(router.zone_information_table.zones_in_network(datagram.source_network), None)
     if not zone_name: return
     router.route(Datagram(hop_count=0,
-                          destination_network=datagram.source_network or rx_port.network,  #TODO is this right?
+                          destination_network=datagram.source_network,
                           source_network=0,
                           destination_node=datagram.source_node,
                           source_node=0,
@@ -119,10 +119,10 @@ class ZoneInformationService(Service):
                           data=struct.pack('>BBHBBHB', self.ATP_FUNC_TRESP | self.ATP_EOM, 0, tid, 0, 0, 1, len(zone_name)) +
                           zone_name))
   
-  def _get_zone_list(self, router, datagram, rx_port, local=False):
+  def _get_zone_list(self, router, datagram, local=False):
     _, _, tid, _, _, start_index = struct.unpack('>BBHBBH', datagram.data)
     #TODO what's meant by 'local' anyway
-    zone_iter = (router.zone_information_table.zones_in_network(datagram.source_network or rx_port.network) if local
+    zone_iter = (router.zone_information_table.zones_in_network(datagram.source_network) if local
                  else iter(router.zone_information_table.zones()))
     for _ in range(start_index - 1): next(zone_iter, None)  # skip over start_index-1 entries (index is 1-relative, I guess)
     last_flag = 0
@@ -138,7 +138,7 @@ class ZoneInformationService(Service):
     else:
       last_flag = 1
     router.route(Datagram(hop_count=0,
-                          destination_network=datagram.source_network or rx_port.network,  #TODO is this right?
+                          destination_network=datagram.source_network,
                           source_network=0,
                           destination_node=datagram.source_node,
                           source_node=0,
@@ -156,9 +156,8 @@ class ZoneInformationService(Service):
   def _run(self, router):
     self.started_event.set()
     while True:
-      item = self.queue.get()
-      if item is self.stop_flag: break
-      datagram, rx_port = item
+      datagram = self.queue.get()
+      if datagram is self.stop_flag: break
       if datagram.ddp_type == self.ZIP_DDP_TYPE:
         if not datagram.data: continue
         if datagram.data[0] == self.ZIP_FUNC_QUERY:
@@ -170,12 +169,12 @@ class ZoneInformationService(Service):
         control, bitmap, _, func, zero, _ = struct.unpack('>BBHBBH', datagram.data)
         if control != self.ATP_FUNC_TREQ or bitmap != 1 or zero != 0: continue
         if func == self.ZIP_ATP_FUNC_GETMYZONE:
-          self._get_my_zone(router, datagram, rx_port)
+          self._get_my_zone(router, datagram)
         elif func == self.ZIP_ATP_FUNC_GETZONELIST:
-          self._get_zone_list(router, datagram, rx_port, local=False)
+          self._get_zone_list(router, datagram, local=False)
         elif func == self.ZIP_ATP_FUNC_GETLOCALZONES:
-          self._get_zone_list(router, datagram, rx_port, local=True)
+          self._get_zone_list(router, datagram, local=True)
     self.stopped_event.set()
   
-  def inbound(self, datagram, rx_port):
-    self.queue.put((datagram, rx_port))
+  def inbound(self, datagram, _):
+    self.queue.put(datagram)

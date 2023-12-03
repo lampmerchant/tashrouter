@@ -5,6 +5,7 @@ import select
 import socket
 import struct
 from threading import Thread, Event
+import time
 
 from . import Port
 from ..datagram import Datagram
@@ -15,6 +16,13 @@ LTOUDP_PORT = 1954
 
 
 class LtoudpPort(Port):
+  
+  SELECT_TIMEOUT = 0.25  # seconds
+  ENQ_INTERVAL = 0.25  # seconds
+  ENQ_ATTEMPTS = 8
+  
+  LLAP_ENQ = 0x81
+  LLAP_ACK = 0x82
   
   def __init__(self, intf_address='0.0.0.0', network=0):
     self.intf_address = intf_address
@@ -33,8 +41,8 @@ class LtoudpPort(Port):
     self.router = router
     self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    #self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-    self.socket.bind(('', LTOUDP_PORT))
+    self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+    self.socket.bind((LTOUDP_GROUP, LTOUDP_PORT))
     self.socket.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 1)
     #TODO next line crashes out with "OSError: [Errno 19] No such device" if network is not up
     self.socket.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP,
@@ -77,16 +85,39 @@ class LtoudpPort(Port):
     
     self.started_event.set()
     
-    #TODO probe for and acquire a node address for real instead of this
-    self.node = 0xFE
-    #TODO defend this node address by responding to ENQs (source node == dest node, type == 0x81)
+    self.node = 0
+    desired_node = 0xFE
+    desired_node_attempts = 0
+    last_attempt = time.monotonic()
     
     while not self.stop_requested:
-      rlist, _, _ = select.select((self.socket,), (), (), 1)
+      
+      rlist, _, _ = select.select((self.socket,), (), (), self.SELECT_TIMEOUT)
+      
+      if self.node == 0 and time.monotonic() - last_attempt >= self.ENQ_INTERVAL:
+        last_attempt = time.monotonic()
+        if desired_node_attempts >= self.ENQ_ATTEMPTS:
+          self.node = desired_node
+        else:
+          self.socket.sendto(self.sender_id + bytes((desired_node, desired_node, self.LLAP_ENQ)), (LTOUDP_GROUP, LTOUDP_PORT))
+          desired_node_attempts += 1
+      
       if self.socket not in rlist: continue
+      
       data, sender_addr = self.socket.recvfrom(65507)
-      if len(data) < 12: continue
+      if len(data) < 7: continue
       if data[0:4] == self.sender_id: continue  #TODO check sender_addr too
-      self.router.inbound(Datagram.from_llap_packet_bytes(data[4:]), self)
+      
+      # data packet
+      if not data[6] & 0x80 and len(data) >= 12:
+        self.router.inbound(Datagram.from_llap_packet_bytes(data[4:]), self)
+      # we've settled on a node address and someone else is asking if they can use it, we say no
+      elif data[6] == self.LLAP_ENQ and self.node and self.node == data[4]:
+        self.socket.sendto(self.sender_id + bytes((self.node, self.node, self.LLAP_ACK)), (LTOUDP_GROUP, LTOUDP_PORT))
+      # someone else has responded that they're on the node address that we want
+      elif data[6] == self.LLAP_ACK and not self.node and desired_node == data[4]:
+        desired_node_attempts = 0
+        desired_node -= 1
+        if desired_node == 0: desired_node = 0xFE  # sure are a lot of addresses in use here, wrap around and search again
     
     self.stopped_event.set()

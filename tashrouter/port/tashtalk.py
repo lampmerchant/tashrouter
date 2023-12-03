@@ -1,6 +1,7 @@
 '''Port that connects to LocalTalk via TashTalk on a serial port.'''
 
-from threading import Thread, Event
+from threading import Thread, Event, Lock
+import time
 
 import serial
 
@@ -63,14 +64,19 @@ class FcsCalculator:
 
 class TashTalkPort(Port):
   
-  LT_ENQ = 0x81
-  LT_ACK = 0x82
+  SERIAL_TIMEOUT = 0.25  # seconds
+  ENQ_INTERVAL = 0.25  # seconds
+  ENQ_ATTEMPTS = 8
+  
+  LLAP_ENQ = 0x81
+  LLAP_ACK = 0x82
   
   def __init__(self, serial_port, network=0):
-    self.serial_obj = serial.Serial(port=serial_port, baudrate=1000000, rtscts=True, timeout=0.25)
+    self.serial_obj = serial.Serial(port=serial_port, baudrate=1000000, rtscts=True, timeout=self.SERIAL_TIMEOUT)
     self.network = self.network_min = self.network_max = network
     self.node = 0
     self.extended_network = False
+    self.serial_lock = Lock()
     self.router = None
     self.thread = None
     self.started_event = Event()
@@ -96,18 +102,20 @@ class TashTalkPort(Port):
       packet_data = bytes((node, self.node, 2)) + datagram.as_long_header_bytes()
     fcs = FcsCalculator()
     fcs.feed(packet_data)
-    self.serial_obj.write(b'\x01')
-    self.serial_obj.write(packet_data)
-    self.serial_obj.write(bytes((fcs.byte1(), fcs.byte2())))
+    with self.serial_lock:
+      self.serial_obj.write(b'\x01')
+      self.serial_obj.write(packet_data)
+      self.serial_obj.write(bytes((fcs.byte1(), fcs.byte2())))
   
   def multicast(self, _, datagram):
     if self.node == 0: return
     packet_data = bytes((0xFF, self.node, 1)) + datagram.as_short_header_bytes()
     fcs = FcsCalculator()
     fcs.feed(packet_data)
-    self.serial_obj.write(b'\x01')
-    self.serial_obj.write(packet_data)
-    self.serial_obj.write(bytes((fcs.byte1(), fcs.byte2())))
+    with self.serial_lock:
+      self.serial_obj.write(b'\x01')
+      self.serial_obj.write(packet_data)
+      self.serial_obj.write(bytes((fcs.byte1(), fcs.byte2())))
   
   def set_network_range(self, network_min, network_max):
     if network_min != network_max: return  # we're a nonextended network, we can't be set to a range of networks
@@ -123,8 +131,17 @@ class TashTalkPort(Port):
     fcs = FcsCalculator()
     fcs.feed_byte(desired_node_address)
     fcs.feed_byte(desired_node_address)
-    fcs.feed_byte(cls.LT_ENQ)
-    return bytes((0x01, desired_node_address, desired_node_address, cls.LT_ENQ, fcs.byte1(), fcs.byte2()))
+    fcs.feed_byte(cls.LLAP_ENQ)
+    return bytes((0x01, desired_node_address, desired_node_address, cls.LLAP_ENQ, fcs.byte1(), fcs.byte2()))
+  
+  @staticmethod
+  def set_node_address_cmd(desired_node_address):
+    if not 1 <= desired_node_address <= 254: raise ValueError('node address %d not between 1 and 254' % desired_node_address)
+    retval = bytearray(33)
+    retval[0] = 0x02
+    byte, bit = divmod(desired_node_address, 8)
+    retval[byte + 1] = 1 << bit
+    return bytes(retval)
   
   def _run(self):
     
@@ -132,19 +149,23 @@ class TashTalkPort(Port):
     
     self.started_event.set()
     
-    self.serial_obj.write(b'\0' * 1024)  # make sure TashTalk is in a known state, first of all
-    self.serial_obj.write(b'\x02' + (b'\0' * 32))  # set node IDs bitmap to zeroes so we don't respond to any RTSes or ENQs yet
-    self.serial_obj.write(b'\x03\0')  # turn off optional TashTalk features
+    with self.serial_lock:
+      self.serial_obj.write(b'\0' * 1024)  # make sure TashTalk is in a known state, first of all
+      self.serial_obj.write(b'\x02' + (b'\0' * 32))  # set node IDs bitmap to zeroes so we don't respond to any RTSes or ENQs yet
+      self.serial_obj.write(b'\x03\0')  # turn off optional TashTalk features
     
-    #TODO probe for and acquire a node address for real instead of this
-    self.serial_obj.write(b'\x02' + (b'\0' * 31) + b'\x40')  # set node IDs bitmap to respond on address 0xFE
-    self.node = 0xFE
+    self.node = 0
+    desired_node = 0xFE
+    desired_node_attempts = 0
+    last_attempt = time.monotonic()
     
     fcs = FcsCalculator()
     buf = bytearray(605)
     buf_ptr = 0
     escaped = False
+    
     while not self.stop_requested:
+      
       for byte in self.serial_obj.read(16384):
         if not escaped and byte == 0x00:
           escaped = True
@@ -154,8 +175,15 @@ class TashTalkPort(Port):
           if byte == 0xFF:  # literal 0x00 byte
             byte = 0x00
           else:
-            if byte == 0xFD and fcs.is_okay() and buf_ptr >= 10 and buf[2] in (1, 2):  # end of valid frame containing DDP packet
-              self.router.inbound(Datagram.from_llap_packet_bytes(buf[:buf_ptr - 2]), self)
+            if byte == 0xFD and fcs.is_okay() and buf_ptr >= 5:
+              # data packet
+              if buf_ptr >= 10 and not buf[2] & 0x80:
+                self.router.inbound(Datagram.from_llap_packet_bytes(buf[:buf_ptr - 2]), self)
+              # someone else has responded that they're on the node address that we want
+              elif buf[2] == self.LLAP_ACK and not self.node and desired_node == buf[0]:
+                desired_node_attempts = 0
+                desired_node -= 1
+                if desired_node == 0: desired_node = 0xFE  # sure are a lot of addresses in use here, wrap around and search again
             fcs.reset()
             buf_ptr = 0
             continue
@@ -163,5 +191,14 @@ class TashTalkPort(Port):
           fcs.feed_byte(byte)
           buf[buf_ptr] = byte
           buf_ptr += 1
+      
+      if self.node == 0 and time.monotonic() - last_attempt >= self.ENQ_INTERVAL:
+        last_attempt = time.monotonic()
+        if desired_node_attempts >= self.ENQ_ATTEMPTS:
+          with self.serial_lock: self.serial_obj.write(self.set_node_address_cmd(desired_node))
+          self.node = desired_node
+        else:
+          with self.serial_lock: self.serial_obj.write(self.enq_frame_cmd(desired_node))
+          desired_node_attempts += 1
     
     self.stopped_event.set()

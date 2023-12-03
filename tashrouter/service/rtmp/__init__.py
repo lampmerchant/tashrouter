@@ -56,4 +56,3 @@ class RtmpService:
       else:
         next_datagram_data.append(binary_tuple)
         next_datagram_data_length += len(binary_tuple)
-

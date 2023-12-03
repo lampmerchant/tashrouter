@@ -35,6 +35,16 @@ class Router:
   def inbound(self, datagram, rx_port):
     '''Called by a Port when a Datagram comes in from that port.  The Datagram may be routed, delivered, both, or neither.'''
     
+    # a network number of zero means "this network", but we know what that is from the port, so sub it in
+    # note that short-header Datagrams always have a network number of zero
+    if rx_port.network:
+      if datagram.destination_network == datagram.source_network == 0x0000:
+        datagram = datagram.copy(destination_network=rx_port.network, source_network=rx_port.network)
+      elif datagram.destination_network == 0x0000:
+        datagram = datagram.copy(destination_network=rx_port.network)
+      elif datagram.source_network == 0x0000:
+        datagram = datagram.copy(source_network=rx_port.network)
+    
     # if this Datagram's destination network is this port's network, there is no need to route it
     if datagram.destination_network in (0x0000, rx_port.network):
       # if Datagram is bound for the router via the any-router address, the broadcast address, or its own node address, deliver it
@@ -57,27 +67,15 @@ class Router:
       elif datagram.destination_node == 0xFF:
         self._deliver(datagram, rx_port)
     
-    self.route(datagram, rx_port)
+    self.route(datagram, originating=False)
   
-  def route(self, datagram, rx_port=None):
-    '''Route a Datagram to/toward its destination.
+  def route(self, datagram, originating=True):
+    '''Route a Datagram to/toward its destination.'''
     
-    rx_port being None indicates the Datagram is originating from the router.
-    '''
-    
-    if rx_port is None:
+    if originating:
       if datagram.hop_count != 0: raise ValueError('originated datagrams must have hop count of 0')
       if datagram.destination_network == 0x0000: raise ValueError('originated datagrams must have nonzero destination network')
       # we expect source_network will be zero and we'll fill it in once we know what port we're coming from
-    elif rx_port.network:
-      # a network number of zero means "this network", but we know what that is from the port, so sub it in
-      # note that short-header Datagrams always have a network number of zero
-      if datagram.destination_network == datagram.source_network == 0x0000:
-        datagram = datagram.copy(destination_network=rx_port.network, source_network=rx_port.network)
-      elif datagram.destination_network == 0x0000:
-        datagram = datagram.copy(destination_network=rx_port.network)
-      elif datagram.source_network == 0x0000:
-        datagram = datagram.copy(source_network=rx_port.network)
     
     # if we still don't know where we're going, we obviously can't get there; discard the Datagram
     if datagram.destination_network == 0x0000: return
@@ -88,7 +86,7 @@ class Router:
     if entry is None: return
     
     # if we're originating this datagram, we expect that its source network and node will be blank
-    if rx_port is None:
+    if originating:
       # if for some reason the port is in the routing table but doesn't yet have a network and node, discard the Datagram
       if entry.port.network == 0x0000 or entry.port.node == 0x00: return
       # else, fill in its source network and node with those of the port it's coming from
