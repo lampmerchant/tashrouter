@@ -105,7 +105,6 @@ class ZoneInformationService(Service):
   def _get_my_zone(self, router, datagram):
     _, _, tid, _, _, start_index = struct.unpack('>BBHBBH', datagram.data)
     if start_index != 0: return
-    #TODO where should I be getting the local network from - datagram source or receive port?
     zone_name = next(router.zone_information_table.zones_in_network(datagram.source_network), None)
     if not zone_name: return
     router.route(Datagram(hop_count=0,

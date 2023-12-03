@@ -8,6 +8,7 @@ from threading import Thread, Event
 import time
 
 from . import Port
+from .localtalk import LocalTalkPort
 from ..datagram import Datagram
 
 
@@ -15,14 +16,9 @@ LTOUDP_GROUP = '239.192.76.84'  # the last two octets spell 'LT'
 LTOUDP_PORT = 1954
 
 
-class LtoudpPort(Port):
+class LtoudpPort(Port, LocalTalkPort):
   
   SELECT_TIMEOUT = 0.25  # seconds
-  ENQ_INTERVAL = 0.25  # seconds
-  ENQ_ATTEMPTS = 8
-  
-  LLAP_ENQ = 0x81
-  LLAP_ACK = 0x82
   
   def __init__(self, intf_address='0.0.0.0', network=0):
     self.intf_address = intf_address

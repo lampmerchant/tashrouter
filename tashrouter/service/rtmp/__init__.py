@@ -1,4 +1,4 @@
-'''RTMP service superclass.'''
+'''RTMP service mixin.'''
 
 from collections import deque
 from itertools import chain
@@ -8,7 +8,7 @@ from ...datagram import Datagram
 
 
 class RtmpService:
-  '''A class that contains constants and common functions used by RTMP services.'''
+  '''Mixin class that contains constants and common functions used by RTMP services.'''
   
   RTMP_SAS = 1
   RTMP_DDP_TYPE_DATA = 1

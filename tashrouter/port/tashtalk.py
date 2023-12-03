@@ -6,6 +6,7 @@ import time
 import serial
 
 from . import Port
+from .localtalk import LocalTalkPort
 from ..datagram import Datagram
 
 
@@ -62,14 +63,9 @@ class FcsCalculator:
     return True if self.reg == 61624 else False  # this is the binary constant on B-22 of Inside Appletalk, but backwards
 
 
-class TashTalkPort(Port):
+class TashTalkPort(Port, LocalTalkPort):
   
   SERIAL_TIMEOUT = 0.25  # seconds
-  ENQ_INTERVAL = 0.25  # seconds
-  ENQ_ATTEMPTS = 8
-  
-  LLAP_ENQ = 0x81
-  LLAP_ACK = 0x82
   
   def __init__(self, serial_port, network=0):
     self.serial_obj = serial.Serial(port=serial_port, baudrate=1000000, rtscts=True, timeout=self.SERIAL_TIMEOUT)
