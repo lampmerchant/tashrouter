@@ -7,7 +7,8 @@ import struct
 from threading import Thread, Event
 
 from . import Service
-from ..datagram import Datagram, ddp_checksum
+from ..datagram import Datagram
+from ..router.zone_information_table import ucase
 
 
 class ZoneInformationService(Service):
@@ -26,6 +27,10 @@ class ZoneInformationService(Service):
   ZIP_ATP_FUNC_GETMYZONE = 7
   ZIP_ATP_FUNC_GETZONELIST = 8
   ZIP_ATP_FUNC_GETLOCALZONES = 9
+  
+  ZIP_GETNETINFO_ZONE_INVALID = 0b10000000
+  ZIP_GETNETINFO_USE_BROADCAST = 0b01000000
+  ZIP_GETNETINFO_ONLY_ONE_ZONE = 0b00100000
   
   ATP_DDP_TYPE = 3
   
@@ -56,12 +61,13 @@ class ZoneInformationService(Service):
       for zone_name in zit.zones_in_network(network):
         yield network, struct.pack('>HB', network, len(zone_name)) + zone_name
   
-  def _query(self, router, datagram):
+  @classmethod
+  def _query(cls, router, datagram):
     if len(datagram.data) < 4: return
     network_count = datagram.data[1]
     if len(datagram.data) != (network_count * 2) + 2: return
     networks = [struct.unpack('>H', datagram.data[(i * 2) + 2:(i * 2) + 4]) for i in range(network_count)]
-    networks_zone_list = list(self._networks_zone_list(router.zone_information_table, networks))
+    networks_zone_list = list(cls._networks_zone_list(router.zone_information_table, networks))
     networks_zone_list_byte_length = sum(len(list_item) for network, list_item in networks_zone_list)
     if networks_zone_list_byte_length + 2 <= Datagram.MAX_DATA_LENGTH:
       router.route(Datagram(hop_count=0,
@@ -71,8 +77,8 @@ class ZoneInformationService(Service):
                             source_node=0,
                             destination_socket=datagram.source_socket,
                             source_socket=datagram.destination_socket,
-                            ddp_type=self.ZIP_DDP_TYPE,
-                            data=struct.pack('>BB', self.ZIP_FUNC_REPLY, len(networks)) +  #TODO should be len(networks_zone_list)?
+                            ddp_type=cls.ZIP_DDP_TYPE,
+                            data=struct.pack('>BB', cls.ZIP_FUNC_REPLY, len(networks)) +  #TODO should be len(networks_zone_list)?
                             b''.join(list_item for network, list_item in networks_zone_list)))
     else:
       zone_list_by_network = {}
@@ -91,22 +97,58 @@ class ZoneInformationService(Service):
                                   source_node=0,
                                   destination_socket=datagram.source_socket,
                                   source_socket=datagram.destination_socket,
-                                  ddp_type=self.ZIP_DDP_TYPE,
-                                  data=struct.pack('>BB', self.ZIP_FUNC_EXT_REPLY, len(zone_list)) + b''.join(datagram_data)))
+                                  ddp_type=cls.ZIP_DDP_TYPE,
+                                  data=struct.pack('>BB', cls.ZIP_FUNC_EXT_REPLY, len(zone_list)) + b''.join(datagram_data)))
           datagram_data.append(list_item)
           datagram_data_length += len(list_item)
   
-  def _get_net_info(self, router, datagram):
+  @classmethod
+  def _get_net_info(cls, router, datagram, rx_port):
+    if 0 in (rx_port.network, rx_port.network_min, rx_port.network_max): return
     if len(datagram.data) < 7: return
     if datagram.data[1:6] != b'\0\0\0\0\0': return
-    zone_name = datagram.data[7:7 + datagram.data[6]]
-    #TODO write the rest of this
+    given_zone_name = datagram.data[7:7 + datagram.data[6]]
+    given_zone_name_ucase = ucase(given_zone_name)
+    flags = cls.ZIP_GETNETINFO_ZONE_INVALID | cls.ZIP_GETNETINFO_ONLY_ONE_ZONE
+    default_zone_name = None
+    number_of_zones = 0
+    multicast_address = b''
+    for zone_name in router.zone_information_table.zones_in_network_range(rx_port.network_min, rx_port.network_max):
+      number_of_zones += 1
+      if default_zone_name is None:
+        default_zone_name = zone_name
+        multicast_address = rx_port.multicast_address(zone_name)
+      if ucase(zone_name) == given_zone_name_ucase:
+        flags &= ~cls.ZIP_GETNETINFO_ZONE_INVALID
+        multicast_address = rx_port.multicast_address(zone_name)
+      if number_of_zones > 1:
+        flags &= ~cls.ZIP_GETNETINFO_ONLY_ONE_ZONE
+        if not flags & cls.ZIP_GETNETINFO_ZONE_INVALID: break
+    if not multicast_address: flags |= cls.ZIP_GETNETINFO_USE_BROADCAST
+    reply_data = b''.join((
+      struct.pack('>BBHHB', cls.ZIP_FUNC_GETNETINFO_REPLY, flags, rx_port.network_min, rx_port.network_max, len(given_zone_name)),
+      given_zone_name,
+      struct.pack('>B', len(multicast_address)),
+      multicast_address,
+      struct.pack('>B', len(default_zone_name)) if flags & cls.ZIP_GETNETINFO_ZONE_INVALID else b'',
+      default_zone_name if flags & cls.ZIP_GETNETINFO_ZONE_INVALID else b''))
+    rx_port.send(datagram.source_network, datagram.source_node, Datagram(hop_count=0,
+                                                                         destination_network=datagram.source_network,
+                                                                         source_network=rx_port.network,
+                                                                         destination_node=datagram.source_node,
+                                                                         source_node=rx_port.node,
+                                                                         destination_socket=datagram.source_socket,
+                                                                         source_socket=cls.ZIP_SAS,
+                                                                         ddp_type=cls.ZIP_DDP_TYPE,
+                                                                         data=reply_data))
   
-  def _get_my_zone(self, router, datagram):
+  @classmethod
+  def _get_my_zone(cls, router, datagram):
     _, _, tid, _, _, start_index = struct.unpack('>BBHBBH', datagram.data)
     if start_index != 0: return
     zone_name = next(router.zone_information_table.zones_in_network(datagram.source_network), None)
     if not zone_name: return
+    #TODO should this take rx_port and reply directly through it rather than routing?
     router.route(Datagram(hop_count=0,
                           destination_network=datagram.source_network,
                           source_network=0,
@@ -114,14 +156,14 @@ class ZoneInformationService(Service):
                           source_node=0,
                           destination_socket=datagram.source_socket,
                           source_socket=datagram.destination_socket,
-                          ddp_type=self.ATP_DDP_TYPE,
-                          data=struct.pack('>BBHBBHB', self.ATP_FUNC_TRESP | self.ATP_EOM, 0, tid, 0, 0, 1, len(zone_name)) +
+                          ddp_type=cls.ATP_DDP_TYPE,
+                          data=struct.pack('>BBHBBHB', cls.ATP_FUNC_TRESP | cls.ATP_EOM, 0, tid, 0, 0, 1, len(zone_name)) +
                           zone_name))
   
-  def _get_zone_list(self, router, datagram, local=False):
+  @classmethod
+  def _get_zone_list(cls, router, datagram, rx_port=None):
     _, _, tid, _, _, start_index = struct.unpack('>BBHBBH', datagram.data)
-    #TODO what's meant by 'local' anyway
-    zone_iter = (router.zone_information_table.zones_in_network(datagram.source_network) if local
+    zone_iter = (router.zone_information_table.zones_in_network_range(rx_port.network_min, rx_port.network_max) if rx_port
                  else iter(router.zone_information_table.zones()))
     for _ in range(start_index - 1): next(zone_iter, None)  # skip over start_index-1 entries (index is 1-relative, I guess)
     last_flag = 0
@@ -136,6 +178,7 @@ class ZoneInformationService(Service):
       data_length += 1 + len(zone_name)
     else:
       last_flag = 1
+    #TODO should this reply directly through rx_port rather than routing?
     router.route(Datagram(hop_count=0,
                           destination_network=datagram.source_network,
                           source_network=0,
@@ -143,9 +186,9 @@ class ZoneInformationService(Service):
                           source_node=0,
                           destination_socket=datagram.source_socket,
                           source_socket=datagram.destination_socket,
-                          ddp_type=self.ATP_DDP_TYPE,
+                          ddp_type=cls.ATP_DDP_TYPE,
                           data=struct.pack('>BBHBBH',
-                                           self.ATP_FUNC_TRESP | self.ATP_EOM,
+                                           cls.ATP_FUNC_TRESP | cls.ATP_EOM,
                                            0,
                                            tid,
                                            last_flag,
@@ -155,14 +198,15 @@ class ZoneInformationService(Service):
   def _run(self, router):
     self.started_event.set()
     while True:
-      datagram = self.queue.get()
-      if datagram is self.stop_flag: break
+      item = self.queue.get()
+      if item is self.stop_flag: break
+      datagram, rx_port = item
       if datagram.ddp_type == self.ZIP_DDP_TYPE:
         if not datagram.data: continue
         if datagram.data[0] == self.ZIP_FUNC_QUERY:
           self._query(router, datagram)
         elif datagram.data[0] == self.ZIP_FUNC_GETNETINFO_REQUEST:
-          self._get_net_info(router, datagram)
+          self._get_net_info(router, datagram, rx_port)
       elif datagram.ddp_type == self.ATP_DDP_TYPE:
         if len(datagram.data) != 8: continue
         control, bitmap, _, func, zero, _ = struct.unpack('>BBHBBH', datagram.data)
@@ -170,10 +214,10 @@ class ZoneInformationService(Service):
         if func == self.ZIP_ATP_FUNC_GETMYZONE:
           self._get_my_zone(router, datagram)
         elif func == self.ZIP_ATP_FUNC_GETZONELIST:
-          self._get_zone_list(router, datagram, local=False)
+          self._get_zone_list(router, datagram)
         elif func == self.ZIP_ATP_FUNC_GETLOCALZONES:
-          self._get_zone_list(router, datagram, local=True)
+          self._get_zone_list(router, datagram, rx_port)
     self.stopped_event.set()
   
-  def inbound(self, datagram, _):
-    self.queue.put(datagram)
+  def inbound(self, datagram, rx_port):
+    self.queue.put((datagram, rx_port))

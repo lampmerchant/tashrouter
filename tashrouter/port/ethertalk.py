@@ -1,6 +1,7 @@
 '''Constants and functions used by EtherTalk Ports.'''
 
 from ..datagram import ddp_checksum
+from ..router.zone_information_table import ucase
 
 
 class EtherTalkPort:
@@ -34,4 +35,4 @@ class EtherTalkPort:
   @classmethod
   def elap_multicast_addr(cls, zone_name):
     '''Return the ELAP multicast address for the named zone.'''
-    return cls.ELAP_MULTICAST_ADDRS[ddp_checksum(zone_name) % len(cls.ELAP_MULTICAST_ADDRS)]
+    return cls.ELAP_MULTICAST_ADDRS[ddp_checksum(ucase(zone_name)) % len(cls.ELAP_MULTICAST_ADDRS)]

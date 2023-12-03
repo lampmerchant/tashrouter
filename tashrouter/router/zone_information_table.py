@@ -77,6 +77,15 @@ class ZoneInformationTable:
     except KeyError:
       return
   
+  def zones_in_network_range(self, network_min, network_max):
+    '''Yield the names of all zones in the networks inside the given range.'''
+    already_yielded = set()
+    for network in range(network_min, network_max + 1):
+      for zone_name in self._network_to_zone_name_set.get(network, ()):
+        if zone_name not in already_yielded:
+          yield zone_name
+          already_yielded.add(zone_name)
+  
   def networks_in_zone(self, zone_name):
     '''Yield the network numbers of all networks in the given zone.'''
     try:
