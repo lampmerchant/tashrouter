@@ -1,0 +1,29 @@
+'''Mixin containing constants used by services that use ZIP (Zone Information Protocol).'''
+
+class ZipService:
+  '''Mixin containing constants used by services that use ZIP (Zone Information Protocol).'''
+  
+  ZIP_SAS = 6
+  ZIP_DDP_TYPE = 6
+  
+  ZIP_FUNC_QUERY = 1
+  ZIP_FUNC_REPLY = 2
+  ZIP_FUNC_GETNETINFO_REQUEST = 5
+  ZIP_FUNC_GETNETINFO_REPLY = 6
+  ZIP_FUNC_NOTIFY = 7
+  ZIP_FUNC_EXT_REPLY = 8
+  
+  ZIP_ATP_FUNC_GETMYZONE = 7
+  ZIP_ATP_FUNC_GETZONELIST = 8
+  ZIP_ATP_FUNC_GETLOCALZONES = 9
+  
+  ZIP_GETNETINFO_ZONE_INVALID = 0b10000000
+  ZIP_GETNETINFO_USE_BROADCAST = 0b01000000
+  ZIP_GETNETINFO_ONLY_ONE_ZONE = 0b00100000
+  
+  ATP_DDP_TYPE = 3
+  
+  ATP_FUNC_TREQ = 0b01000000
+  ATP_FUNC_TRESP = 0b10000000
+  ATP_FUNC_TREL = 0b11000000
+  ATP_EOM = 0b00010000

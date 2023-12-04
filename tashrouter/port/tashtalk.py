@@ -1,6 +1,7 @@
 '''Port that connects to LocalTalk via TashTalk on a serial port.'''
 
-from threading import Thread, Event, Lock
+from queue import Queue
+from threading import Thread, Event
 import time
 
 import serial
@@ -72,22 +73,31 @@ class TashTalkPort(Port, LocalTalkPort):
     self.network = self.network_min = self.network_max = network
     self.node = 0
     self.extended_network = False
-    self.serial_lock = Lock()
     self.router = None
-    self.thread = None
-    self.started_event = Event()
-    self.stop_requested = False
-    self.stopped_event = Event()
+    self.main_thread = None
+    self.main_started_event = Event()
+    self.main_stop_requested = False
+    self.main_stopped_event = Event()
+    self.writer_thread = None
+    self.writer_started_event = Event()
+    self.writer_queue = Queue()
+    self.writer_stop_flag = object()
+    self.writer_stopped_event = Event()
   
   def start(self, router):
     self.router = router
-    self.thread = Thread(target=self._run)
-    self.thread.start()
-    self.started_event.wait()
+    self.main_thread = Thread(target=self._main_run)
+    self.main_thread.start()
+    self.writer_thread = Thread(target=self._writer_run)
+    self.writer_thread.start()
+    self.main_started_event.wait()
+    self.writer_started_event.wait()
   
   def stop(self):
-    self.stop_requested = True
-    self.stopped_event.wait()
+    self.main_stop_requested = True
+    self.writer_queue.put(self.writer_stop_flag)
+    self.main_stopped_event.wait()
+    self.writer_stopped_event.wait()
   
   def send(self, network, node, datagram):
     if network not in (0, self.network): return
@@ -98,20 +108,14 @@ class TashTalkPort(Port, LocalTalkPort):
       packet_data = bytes((node, self.node, 2)) + datagram.as_long_header_bytes()
     fcs = FcsCalculator()
     fcs.feed(packet_data)
-    with self.serial_lock:
-      self.serial_obj.write(b'\x01')
-      self.serial_obj.write(packet_data)
-      self.serial_obj.write(bytes((fcs.byte1(), fcs.byte2())))
+    self.writer_queue.put(b''.join((b'\x01', packet_data, bytes((fcs.byte1(), fcs.byte2())))))
   
   def multicast(self, _, datagram):
     if self.node == 0: return
     packet_data = bytes((0xFF, self.node, 1)) + datagram.as_short_header_bytes()
     fcs = FcsCalculator()
     fcs.feed(packet_data)
-    with self.serial_lock:
-      self.serial_obj.write(b'\x01')
-      self.serial_obj.write(packet_data)
-      self.serial_obj.write(bytes((fcs.byte1(), fcs.byte2())))
+    self.writer_queue.put(b''.join((b'\x01', packet_data, bytes((fcs.byte1(), fcs.byte2())))))
   
   def set_network_range(self, network_min, network_max):
     if network_min != network_max: return  # we're a nonextended network, we can't be set to a range of networks
@@ -139,16 +143,17 @@ class TashTalkPort(Port, LocalTalkPort):
     retval[byte + 1] = 1 << bit
     return bytes(retval)
   
-  def _run(self):
+  def _main_run(self):
     
     if self.network: self.set_network_range(self.network, self.network)
     
-    self.started_event.set()
+    self.main_started_event.set()
     
-    with self.serial_lock:
-      self.serial_obj.write(b'\0' * 1024)  # make sure TashTalk is in a known state, first of all
-      self.serial_obj.write(b'\x02' + (b'\0' * 32))  # set node IDs bitmap to zeroes so we don't respond to any RTSes or ENQs yet
-      self.serial_obj.write(b'\x03\0')  # turn off optional TashTalk features
+    self.writer_queue.put(b''.join((
+      b'\0' * 1024,  # make sure TashTalk is in a known state, first of all
+      b'\x02' + (b'\0' * 32),  # set node IDs bitmap to zeroes so we don't respond to any RTSes or ENQs yet
+      b'\x03\0',  # turn off optional TashTalk features
+    )))
     
     self.node = 0
     desired_node = 0xFE
@@ -160,7 +165,7 @@ class TashTalkPort(Port, LocalTalkPort):
     buf_ptr = 0
     escaped = False
     
-    while not self.stop_requested:
+    while not self.main_stop_requested:
       
       for byte in self.serial_obj.read(16384):
         if not escaped and byte == 0x00:
@@ -191,10 +196,19 @@ class TashTalkPort(Port, LocalTalkPort):
       if self.node == 0 and time.monotonic() - last_attempt >= self.ENQ_INTERVAL:
         last_attempt = time.monotonic()
         if desired_node_attempts >= self.ENQ_ATTEMPTS:
-          with self.serial_lock: self.serial_obj.write(self.set_node_address_cmd(desired_node))
+          self.writer_queue.put(self.set_node_address_cmd(desired_node))
           self.node = desired_node
         else:
-          with self.serial_lock: self.serial_obj.write(self.enq_frame_cmd(desired_node))
+          self.writer_queue.put(self.enq_frame_cmd(desired_node))
           desired_node_attempts += 1
     
-    self.stopped_event.set()
+    self.main_stopped_event.set()
+  
+  def _writer_run(self):
+    self.writer_started_event.set()
+    while True:
+      item = self.writer_queue.get()
+      if item is self.writer_stop_flag: break
+      #TODO make sure OS queue isn't overflowing?
+      self.serial_obj.write(item)
+    self.writer_stopped_event.set()

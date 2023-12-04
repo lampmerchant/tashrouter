@@ -11,11 +11,11 @@ class Router:
     self.ports = ports
     self.services = services
     self.zone_information_table = ZoneInformationTable()
-    for zone_name, networks in seed_zones.items(): self.zone_information_table.add_networks(zone_name, networks)
+    for zone_name, networks in seed_zones.items(): self.zone_information_table.add_networks_to_zone(zone_name, networks)
     self._services_by_sas = {}
     for sas, service in self.services:
       if sas is not None: self._services_by_sas[sas] = service
-    self.routing_table = RoutingTable()
+    self.routing_table = RoutingTable(self.zone_information_table)
   
   def _deliver(self, datagram, rx_port):
     '''Deliver a datagram locally to the "control plane" of the router.'''

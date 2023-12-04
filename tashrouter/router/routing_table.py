@@ -27,7 +27,8 @@ class RoutingTable:
   STATE_BAD = 3
   STATE_WORST = 4
   
-  def __init__(self):
+  def __init__(self, zone_information_table):
+    self._zone_information_table = zone_information_table
     self._entry_by_network = {}
     self._state_by_entry = {}
     self._lock = Lock()
@@ -35,6 +36,11 @@ class RoutingTable:
   def __contains__(self, entry):
     with self._lock:
       return True if entry in self._state_by_entry else False
+  
+  def __iter__(self):
+    with self._lock:
+      retval = deque(self._state_by_entry.keys())
+    yield from retval
   
   def get_by_network(self, network):
     '''Look up and return an entry in this RoutingTable by network number.  Returns (entry, is_bad).'''
@@ -84,11 +90,10 @@ class RoutingTable:
   
   def age(self):
     '''Age the RoutingTableEntries in this RoutingTable.'''
-    entries = set(self._entry_by_network.values())
     entries_to_delete = set()
     networks_to_delete = deque()
     with self._lock:
-      for entry in entries:
+      for entry in set(self._entry_by_network.values()):
         if self._state_by_entry[entry] == self.STATE_WORST:
           entries_to_delete.add(entry)
           self._state_by_entry.pop(entry)
@@ -101,7 +106,7 @@ class RoutingTable:
       for network, entry in self._entry_by_network.items():
         if entry in entries_to_delete: networks_to_delete.append(network)
       for network in networks_to_delete: self._entry_by_network.pop(network)
-      #TODO when deleting networks, update the ZIT too
+      self._zone_information_table.remove_networks(networks_to_delete)
   
   def entries(self):
     '''Yield entries from this RoutingTable along with their badness state.'''
@@ -119,7 +124,7 @@ class RoutingTable:
           networks_to_delete.append(network)
       for entry in entries_to_delete: self._state_by_entry.pop(entry)
       for network in networks_to_delete: self._entry_by_network.pop(network)
-      #TODO when deleting networks, update the ZIT too
+      self._zone_information_table.remove_networks(networks_to_delete)
       entry = RoutingTableEntry(network_min=network_min,
                                 network_max=network_max,
                                 distance=0,
