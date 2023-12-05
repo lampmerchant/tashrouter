@@ -74,7 +74,9 @@ class ZoneInformationTable:
           zones_affected.add(zone_name)
           self._zone_name_to_network_set[zone_name].remove(network)
       for zone_name in zones_affected:
-        if not self._zone_name_to_network_set[zone_name]: self._zone_name_to_network_set.pop(zone_name)
+        if not self._zone_name_to_network_set[zone_name]:
+          self._zone_name_to_network_set.pop(zone_name)
+          self._ucased_zone_name_to_zone_name.pop(ucase(zone_name))
   
   def zones(self):
     '''Return the zones in this ZIT.'''

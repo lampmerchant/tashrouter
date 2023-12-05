@@ -10,7 +10,7 @@ from .. import Service
 from ...datagram import Datagram
 
 
-class ZipSendingService(Service):
+class ZipSendingService(Service, ZipService):
   '''A Service which sends ZIP queries to fill out its router's Zone Information Table.'''
   
   DEFAULT_TIMEOUT = 10  # seconds

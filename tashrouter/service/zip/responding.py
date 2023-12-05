@@ -21,6 +21,7 @@ class ZipRespondingService(Service, ZipService):
     self.stop_flag = object()
     self.started_event = Event()
     self.stopped_event = Event()
+    self._pending_network_zone_name_set = {}
   
   def start(self, router):
     self.thread = Thread(target=self._run, args=(router,))
@@ -30,6 +31,36 @@ class ZipRespondingService(Service, ZipService):
   def stop(self):
     self.queue.put(self.stop_flag)
     self.stopped_event.wait()
+  
+  def _reply(self, router, datagram):
+    if len(datagram.data) < 2: return
+    func, count = struct.unpack('>BB', datagram.data[:2])
+    data = datagram.data[2:]
+    if func == self.ZIP_FUNC_REPLY:
+      networks_to_add_by_zone_name = {}
+      while len(data) >= 3:
+        network, zone_name_length = struct.unpack('>HB', data[:3])
+        zone_name = data[3:3 + zone_name_length]
+        if len(zone_name) != zone_name_length: break
+        data = data[3 + zone_name_length:]
+        if zone_name_length == 0: continue
+        if zone_name not in networks_to_add_by_zone_name: networks_to_add_by_zone_name[zone_name] = set()
+        networks_to_add_by_zone_name[zone_name].add(network)
+      for zone_name, networks in networks_to_add_by_zone_name.items():
+        router.zone_information_table.add_networks_to_zone(zone_name, networks)
+    elif func == self.ZIP_FUNC_EXT_REPLY:
+      network = None
+      while len(data) >= 3:
+        network, zone_name_length = struct.unpack('>HB', data[:3])
+        zone_name = data[3:3 + zone_name_length]
+        if len(zone_name) != zone_name_length: break
+        data = data[3 + zone_name_length:]
+        if zone_name_length == 0: continue
+        if network not in self._pending_network_zone_name_set: self._pending_network_zone_name_set[network] = set()
+        self._pending_network_zone_name_set[network].add(zone_name)
+      if network is not None and len(self._pending_network_zone_name_set.get(network, ())) >= count and count >= 1:
+        for zone_name in self._pending_network_zone_name_set.pop(network):
+          router.zone_information_table.add_networks_to_zone(zone_name, (network,))
   
   @staticmethod
   def _networks_zone_list(zit, networks):
@@ -179,7 +210,9 @@ class ZipRespondingService(Service, ZipService):
       datagram, rx_port = item
       if datagram.ddp_type == self.ZIP_DDP_TYPE:
         if not datagram.data: continue
-        if datagram.data[0] == self.ZIP_FUNC_QUERY:
+        if datagram.data[0] in (self.ZIP_FUNC_REPLY, self.ZIP_FUNC_EXT_REPLY):
+          self._reply(router, datagram)
+        elif datagram.data[0] == self.ZIP_FUNC_QUERY:
           self._query(router, datagram)
         elif datagram.data[0] == self.ZIP_FUNC_GETNETINFO_REQUEST:
           self._get_net_info(router, datagram, rx_port)

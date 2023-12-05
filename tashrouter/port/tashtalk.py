@@ -1,6 +1,6 @@
 '''Port that connects to LocalTalk via TashTalk on a serial port.'''
 
-from queue import Queue
+from queue import Queue, Empty
 from threading import Thread, Event
 import time
 
@@ -69,7 +69,7 @@ class TashTalkPort(Port, LocalTalkPort):
   SERIAL_TIMEOUT = 0.25  # seconds
   
   def __init__(self, serial_port, network=0):
-    self.serial_obj = serial.Serial(port=serial_port, baudrate=1000000, rtscts=True, timeout=self.SERIAL_TIMEOUT)
+    self.serial_obj = serial.Serial(port=serial_port, baudrate=1000000, rtscts=True, timeout=None)
     self.network = self.network_min = self.network_max = network
     self.node = 0
     self.extended_network = False
@@ -167,7 +167,7 @@ class TashTalkPort(Port, LocalTalkPort):
     
     while not self.main_stop_requested:
       
-      for byte in self.serial_obj.read(16384):
+      for byte in self.serial_obj.read(self.serial_obj.in_waiting or 1):
         if not escaped and byte == 0x00:
           escaped = True
           continue
@@ -207,8 +207,12 @@ class TashTalkPort(Port, LocalTalkPort):
   def _writer_run(self):
     self.writer_started_event.set()
     while True:
-      item = self.writer_queue.get()
-      if item is self.writer_stop_flag: break
+      try:
+        item = self.writer_queue.get(block=True, timeout=self.SERIAL_TIMEOUT)
+      except Empty:
+        item = None
       #TODO make sure OS queue isn't overflowing?
-      self.serial_obj.write(item)
+      self.serial_obj.cancel_read()
+      if item is self.writer_stop_flag: break
+      if item: self.serial_obj.write(item)
     self.writer_stopped_event.set()
