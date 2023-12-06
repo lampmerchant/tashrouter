@@ -11,8 +11,8 @@ Very early days!  Please neither judge nor depend on this code.
 ```python
 import time
 
-from tashrouter.port.ltoudp import LtoudpPort
-from tashrouter.port.tashtalk import TashTalkPort
+from tashrouter.port.localtalk.ltoudp import LtoudpPort
+from tashrouter.port.localtalk.tashtalk import TashTalkPort
 from tashrouter.router.router import Router
 from tashrouter.service.echo import EchoService
 from tashrouter.service.name_information import NameInformationService
