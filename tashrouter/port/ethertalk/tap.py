@@ -19,8 +19,8 @@ class TapPort(EtherTalkPort):
   IFF_TAP = 0x0002
   IFF_NO_PI = 0x1000
   
-  def __init__(self, tap_name=None, network_min=0, network_max=0, desired_network=0, desired_node=0):
-    super().__init__(b'\xDE\xAD\xBE\xEF\xCA\xFE', network_min, network_max, desired_network, desired_node)  #TODO get MAC
+  def __init__(self, tap_name, hw_addr, network_min=0, network_max=0, desired_network=0, desired_node=0):
+    super().__init__(hw_addr, network_min, network_max, desired_network, desired_node)
     self._reader_thread = None
     self._reader_started_event = Event()
     self._reader_stop_requested = False
