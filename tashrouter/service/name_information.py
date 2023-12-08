@@ -106,7 +106,7 @@ class NameInformationService(Service):
             router.route(Datagram(hop_count=0,
                                   destination_network=entry.network_min,
                                   source_network=0,
-                                  destination_node=0,
+                                  destination_node=0x00,
                                   source_node=0,
                                   destination_socket=self.NBP_SAS,
                                   source_socket=self.NBP_SAS,

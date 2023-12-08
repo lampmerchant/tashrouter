@@ -28,7 +28,6 @@ class RtmpService:
     binary_tuples = deque()
     this_net = None
     for entry, is_bad in router.routing_table.entries():
-      if entry.port is port and split_horizon: continue  # split horizon
       distance = self.NOTIFY_NEIGHBOR if is_bad else entry.distance
       if not entry.port.extended_network:
         binary_tuple = struct.pack('>HB', entry.network_min, distance & 0x1F)
@@ -36,6 +35,8 @@ class RtmpService:
         binary_tuple = struct.pack('>HBHB', entry.network_min, (distance & 0x1F) | 0x80, entry.network_max, self.RTMP_VERSION)
       if port.extended_network and port.network_min == entry.network_min and port.network_max == entry.network_max:
         this_net = binary_tuple
+      elif entry.port is port and split_horizon:
+        pass  # split horizon
       else:
         binary_tuples.append(binary_tuple)
     if port.extended_network and not this_net: raise ValueError("port's network range was not found in routing table")

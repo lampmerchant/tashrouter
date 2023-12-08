@@ -49,15 +49,15 @@ class ZipSendingService(Service, ZipService):
             query_data_block.append(struct.pack('>H', network))
         for query_data_block in query_data_blocks:
           if entry.distance == 0:
-            entry.port.send(entry.port.network, 0xFF, Datagram(hop_count=0,
-                                                               destination_network=entry.port.network,
-                                                               source_network=entry.port.network,
-                                                               destination_node=0xFF,
-                                                               source_node=entry.port.node,
-                                                               destination_socket=self.ZIP_SAS,
-                                                               source_socket=self.ZIP_SAS,
-                                                               ddp_type=self.ZIP_DDP_TYPE,
-                                                               data=query_data_block))
+            entry.port.send(0x0000, 0xFF, Datagram(hop_count=0,
+                                                   destination_network=0x0000,
+                                                   source_network=entry.port.network,
+                                                   destination_node=0xFF,
+                                                   source_node=entry.port.node,
+                                                   destination_socket=self.ZIP_SAS,
+                                                   source_socket=self.ZIP_SAS,
+                                                   ddp_type=self.ZIP_DDP_TYPE,
+                                                   data=query_data_block))
           else:
             entry.port.send(entry.next_network, entry.next_node, Datagram(hop_count=0,
                                                                           destination_network=entry.next_network,

@@ -40,15 +40,15 @@ class RtmpSendingService(Service, RtmpService):
       if item is self.stop_flag: break
       for port in router.ports:
         for datagram_data in self.make_routing_table_datagram_data(router, port):
-          port.send(port.network, 0xFF, Datagram(hop_count=0,
-                                                 destination_network=port.network,
-                                                 source_network=port.network,
-                                                 destination_node=0xFF,
-                                                 source_node=port.node,
-                                                 destination_socket=self.RTMP_SAS,
-                                                 source_socket=self.RTMP_SAS,
-                                                 ddp_type=self.RTMP_DDP_TYPE_DATA,
-                                                 data=datagram_data))
+          port.send(0x0000, 0xFF, Datagram(hop_count=0,
+                                           destination_network=0x0000,
+                                           source_network=port.network,
+                                           destination_node=0xFF,
+                                           source_node=port.node,
+                                           destination_socket=self.RTMP_SAS,
+                                           source_socket=self.RTMP_SAS,
+                                           ddp_type=self.RTMP_DDP_TYPE_DATA,
+                                           data=datagram_data))
       if item is not None: self.queue.task_done()
     self.queue.task_done()
   
