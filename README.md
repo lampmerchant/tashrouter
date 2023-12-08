@@ -1,16 +1,17 @@
 # TashRouter
 
-An AppleTalk router that supports LToUDP and TashTalk.
+An AppleTalk router that supports LToUDP and TashTalk in addition to EtherTalk.
 
 ## Status
 
-Very early days!  Please neither judge nor depend on this code.
+Early days!  Basically functional but a long way from mature.
 
 ## Quick Start
 
 ```python
 import time
 
+from tashrouter.port.ethertalk.macvtap import MacvtapPort
 from tashrouter.port.localtalk.ltoudp import LtoudpPort
 from tashrouter.port.localtalk.tashtalk import TashTalkPort
 from tashrouter.router.router import Router
@@ -25,7 +26,8 @@ from tashrouter.service.zip.sending import ZipSendingService
 
 router = Router(ports=(
   LtoudpPort(network=1),
-  TashTalkPort('COM5', network=2),
+  TashTalkPort('/dev/ttyAMA0', network=2),
+  MacvtapPort(macvtap='macvtap0', network_min=3, network_max=5),
 ), services=(
   (EchoService.ECHO_SAS, EchoService()),
   (NameInformationService.NBP_SAS, NameInformationService()),
@@ -37,6 +39,7 @@ router = Router(ports=(
 ), seed_zones={
   b'LToUDP Network': (1,),
   b'TashTalk Network': (2,),
+  b'EtherTalk Network': (3, 4, 5),
 })
 print('router away!')
 router.start()
