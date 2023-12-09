@@ -78,7 +78,7 @@ class NameInformationService(Service):
         
         entries = set(router.routing_table.get_by_network(network)
                       for network in router.zone_information_table.networks_in_zone(zone_field))
-        entries.discard(None)
+        entries.discard((None, None))
         for entry, _ in entries:
           if entry.distance == 0:
             entry.port.multicast(zone_field, Datagram(hop_count=0,
@@ -127,27 +127,29 @@ class NameInformationService(Service):
         
       elif func == self.NBP_CTRL_FWDREQ:
         
-        rx_port.multicast(zone_field, Datagram(hop_count=0,
-                                               destination_network=0x0000,
-                                               source_network=rx_port.network,
-                                               destination_node=0xFF,
-                                               source_node=rx_port.node,
-                                               destination_socket=self.NBP_SAS,
-                                               source_socket=self.NBP_SAS,
-                                               ddp_type=self.NBP_DDP_TYPE,
-                                               data=b''.join((struct.pack('>BBHBBBB',
-                                                                          (self.NBP_CTRL_LKUP << 4) | 1,
-                                                                          nbp_id,
-                                                                          req_network,
-                                                                          req_node,
-                                                                          req_socket,
-                                                                          0,
-                                                                          len(object_field)),
-                                                              object_field,
-                                                              struct.pack('>B', len(type_field)),
-                                                              type_field,
-                                                              struct.pack('>B', len(zone_field)),
-                                                              zone_field))))
+        entry, _ = router.routing_table.get_by_network(datagram.destination_network)
+        if entry is None or entry.distance != 0: continue  # FwdReq thinks we're directly connected to this network but we're not
+        entry.port.multicast(zone_field, Datagram(hop_count=0,
+                                                  destination_network=0x0000,
+                                                  source_network=entry.port.network,
+                                                  destination_node=0xFF,
+                                                  source_node=entry.port.node,
+                                                  destination_socket=self.NBP_SAS,
+                                                  source_socket=self.NBP_SAS,
+                                                  ddp_type=self.NBP_DDP_TYPE,
+                                                  data=b''.join((struct.pack('>BBHBBBB',
+                                                                             (self.NBP_CTRL_LKUP << 4) | 1,
+                                                                             nbp_id,
+                                                                             req_network,
+                                                                             req_node,
+                                                                             req_socket,
+                                                                             0,
+                                                                             len(object_field)),
+                                                                 object_field,
+                                                                 struct.pack('>B', len(type_field)),
+                                                                 type_field,
+                                                                 struct.pack('>B', len(zone_field)),
+                                                                 zone_field))))
     
     self.stopped_event.set()
   

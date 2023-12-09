@@ -35,21 +35,14 @@ class EchoService(Service):
   def _run(self, router):
     self.started_event.set()
     while True:
-      datagram = self.queue.get()
-      if datagram is self.stop_flag: break
+      item = self.queue.get()
+      if item is self.stop_flag: break
+      datagram, rx_port = item
       if datagram.ddp_type != self.ECHO_DDP_TYPE: continue
       if not datagram.data: continue
       if datagram.data[0:1] != self.ECHO_FUNC_REQUEST_BYTE: continue
-      router.route(Datagram(hop_count=0,
-                            destination_network=datagram.source_network,
-                            source_network=0,  # Router.route will fill this in
-                            destination_node=datagram.source_node,
-                            source_node=0,  # Router.route will fill this in
-                            destination_socket=datagram.source_socket,
-                            source_socket=datagram.destination_socket,
-                            ddp_type=self.ECHO_DDP_TYPE,
-                            data=self.ECHO_FUNC_REPLY_BYTE + datagram.data[1:]))
+      router.reply(datagram, rx_port, self.ECHO_DDP_TYPE, self.ECHO_FUNC_REPLY_BYTE + datagram.data[1:])
     self.stopped_event.set()
   
   def inbound(self, datagram, rx_port):
-    self.queue.put(datagram)
+    self.queue.put((datagram, rx_port))

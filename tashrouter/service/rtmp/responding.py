@@ -74,7 +74,7 @@ class RtmpRespondingService(Service, RtmpService):
             network_max, _ = struct.unpack('>HB', packed)
             data_idx += 6
           else:
-            network_max = None
+            network_max = network_min
             data_idx += 3
           tuples.append((network_min, network_max, range_distance & 0x1F))
         if data_idx != len(data): continue  # invalid, tuples did not end where expected
@@ -107,29 +107,13 @@ class RtmpRespondingService(Service, RtmpService):
         response_data = struct.pack('>HBB', rx_port.network, 8, rx_port.node)
         if rx_port.extended_network:
           response_data += struct.pack('>HBHB', rx_port.network_min, 0x80, rx_port.network_max, self.RTMP_VERSION)
-        rx_port.send(datagram.source_network, datagram.source_node, Datagram(hop_count=0,
-                                                                             destination_network=datagram.source_network,
-                                                                             source_network=rx_port.network,
-                                                                             destination_node=datagram.source_node,
-                                                                             source_node=rx_port.node,
-                                                                             destination_socket=datagram.source_socket,
-                                                                             source_socket=datagram.destination_socket,
-                                                                             ddp_type=1,
-                                                                             data=response_data))
+        router.reply(datagram, rx_port, self.RTMP_DDP_TYPE_DATA, response_data)
         
       elif datagram.data[0] in (self.RTMP_FUNC_RDR_SPLIT_HORIZON, self.RTMP_FUNC_RDR_NO_SPLIT_HORIZON):
         
         split_horizon = True if datagram.data[0] == self.RTMP_FUNC_RDR_SPLIT_HORIZON else False
         for datagram_data in self.make_routing_table_datagram_data(router, rx_port, split_horizon):
-          router.route(Datagram(hop_count=0,
-                                destination_network=datagram.source_network,
-                                source_network=rx_port.network,
-                                destination_node=datagram.source_node,
-                                source_node=rx_port.node,
-                                destination_socket=datagram.source_socket,
-                                source_socket=datagram.destination_socket,
-                                ddp_type=self.RTMP_DDP_TYPE_DATA,
-                                data=datagram_data))
+          router.reply(datagram, rx_port, self.RTMP_DDP_TYPE_DATA, datagram_data)
     
     self.queue.task_done()
   

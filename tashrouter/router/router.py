@@ -109,3 +109,29 @@ class Router:
     else:
       entry.port.send(datagram.destination_network, datagram.destination_node, datagram)
       return
+  
+  def reply(self, datagram, rx_port, ddp_type, data):
+    '''Build and send a reply Datagram to the given Datagram coming in over the given Port with the given data.'''
+    
+    if datagram.source_node in (0x00, 0xFF):
+      pass  # invalid as source, don't reply
+    elif datagram.source_network:
+      self.route(Datagram(hop_count=0,
+                          destination_network=datagram.source_network,
+                          source_network=0,  # route will fill this in
+                          destination_node=datagram.source_node,
+                          source_node=0,  # route will fill this in
+                          destination_socket=datagram.source_socket,
+                          source_socket=datagram.destination_socket,
+                          ddp_type=ddp_type,
+                          data=data))
+    else:
+      rx_port.send(0x0000, datagram.source_node, Datagram(hop_count=0,
+                                                          destination_network=0x0000,
+                                                          source_network=rx_port.network,
+                                                          destination_node=datagram.source_node,
+                                                          source_node=rx_port.node,
+                                                          destination_socket=datagram.source_socket,
+                                                          source_socket=datagram.destination_socket,
+                                                          ddp_type=ddp_type,
+                                                          data=data))

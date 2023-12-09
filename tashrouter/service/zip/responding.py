@@ -69,24 +69,17 @@ class ZipRespondingService(Service, ZipService):
         yield network, struct.pack('>HB', network, len(zone_name)) + zone_name
   
   @classmethod
-  def _query(cls, router, datagram):
+  def _query(cls, router, datagram, rx_port):
     if len(datagram.data) < 4: return
     network_count = datagram.data[1]
     if len(datagram.data) != (network_count * 2) + 2: return
-    networks = [struct.unpack('>H', datagram.data[(i * 2) + 2:(i * 2) + 4]) for i in range(network_count)]
+    networks = [struct.unpack('>H', datagram.data[(i * 2) + 2:(i * 2) + 4])[0] for i in range(network_count)]
     networks_zone_list = list(cls._networks_zone_list(router.zone_information_table, networks))
     networks_zone_list_byte_length = sum(len(list_item) for network, list_item in networks_zone_list)
     if networks_zone_list_byte_length + 2 <= Datagram.MAX_DATA_LENGTH:
-      router.route(Datagram(hop_count=0,
-                            destination_network=datagram.source_network,
-                            source_network=0,
-                            destination_node=datagram.source_node,
-                            source_node=0,
-                            destination_socket=datagram.source_socket,
-                            source_socket=datagram.destination_socket,
-                            ddp_type=cls.ZIP_DDP_TYPE,
-                            data=struct.pack('>BB', cls.ZIP_FUNC_REPLY, len(networks)) +  #TODO should be len(networks_zone_list)?
-                            b''.join(list_item for network, list_item in networks_zone_list)))
+      #TODO should be len(networks_zone_list) instead of len(networks)?
+      router.reply(datagram, rx_port, cls.ZIP_DDP_TYPE, struct.pack('>BB', cls.ZIP_FUNC_REPLY, len(networks))
+                   + b''.join(list_item for network, list_item in networks_zone_list))
     else:
       zone_list_by_network = {}
       for network, list_item in networks_zone_list:
@@ -97,15 +90,8 @@ class ZipRespondingService(Service, ZipService):
         datagram_data_length = 0
         for list_item in chain(zone_list, (None,)):
           if list_item is None or datagram_data_length + len(list_item) > Datagram.MAX_DATA_LENGTH - 2:
-            router.route(Datagram(hop_count=0,
-                                  destination_network=datagram.source_network,
-                                  source_network=0,
-                                  destination_node=datagram.source_node,
-                                  source_node=0,
-                                  destination_socket=datagram.source_socket,
-                                  source_socket=datagram.destination_socket,
-                                  ddp_type=cls.ZIP_DDP_TYPE,
-                                  data=struct.pack('>BB', cls.ZIP_FUNC_EXT_REPLY, len(zone_list)) + b''.join(datagram_data)))
+            router.reply(datagram, rx_port, cls.ZIP_DDP_TYPE, struct.pack('>BB', cls.ZIP_FUNC_EXT_REPLY,
+                                                                          len(zone_list)) + b''.join(datagram_data))
           datagram_data.append(list_item)
           datagram_data_length += len(list_item)
   
@@ -139,40 +125,29 @@ class ZipRespondingService(Service, ZipService):
       multicast_address,
       struct.pack('>B', len(default_zone_name)) if flags & cls.ZIP_GETNETINFO_ZONE_INVALID else b'',
       default_zone_name if flags & cls.ZIP_GETNETINFO_ZONE_INVALID else b''))
-    rx_port.send(datagram.source_network, datagram.source_node, Datagram(hop_count=0,
-                                                                         destination_network=datagram.source_network,
-                                                                         source_network=rx_port.network,
-                                                                         destination_node=datagram.source_node,
-                                                                         source_node=rx_port.node,
-                                                                         destination_socket=datagram.source_socket,
-                                                                         source_socket=cls.ZIP_SAS,
-                                                                         ddp_type=cls.ZIP_DDP_TYPE,
-                                                                         data=reply_data))
+    router.reply(datagram, rx_port, cls.ZIP_DDP_TYPE, reply_data)
   
   @classmethod
-  def _get_my_zone(cls, router, datagram):
+  def _get_my_zone(cls, router, datagram, rx_port):
     _, _, tid, _, _, start_index = struct.unpack('>BBHBBH', datagram.data)
     if start_index != 0: return
     zone_name = next(router.zone_information_table.zones_in_network(datagram.source_network), None)
     if not zone_name: return
-    #TODO should this take rx_port and reply directly through it rather than routing?
-    router.route(Datagram(hop_count=0,
-                          destination_network=datagram.source_network,
-                          source_network=0,
-                          destination_node=datagram.source_node,
-                          source_node=0,
-                          destination_socket=datagram.source_socket,
-                          source_socket=datagram.destination_socket,
-                          ddp_type=cls.ATP_DDP_TYPE,
-                          data=struct.pack('>BBHBBHB', cls.ATP_FUNC_TRESP | cls.ATP_EOM, 0, tid, 0, 0, 1, len(zone_name)) +
-                          zone_name))
+    router.reply(datagram, rx_port, cls.ATP_DDP_TYPE, struct.pack('>BBHBBHB',
+                                                                  cls.ATP_FUNC_TRESP | cls.ATP_EOM,
+                                                                  0,
+                                                                  tid,
+                                                                  0,
+                                                                  0,
+                                                                  1,
+                                                                  len(zone_name)) + zone_name)
   
   @classmethod
-  def _get_zone_list(cls, router, datagram, rx_port=None):
+  def _get_zone_list(cls, router, datagram, rx_port, local=False):
     _, _, tid, _, _, start_index = struct.unpack('>BBHBBH', datagram.data)
-    zone_iter = (router.zone_information_table.zones_in_network_range(rx_port.network_min, rx_port.network_max) if rx_port
+    zone_iter = (router.zone_information_table.zones_in_network_range(rx_port.network_min, rx_port.network_max) if local
                  else iter(router.zone_information_table.zones()))
-    for _ in range(start_index - 1): next(zone_iter, None)  # skip over start_index-1 entries (index is 1-relative, I guess)
+    for _ in range(start_index - 1): next(zone_iter, None)  # skip over start_index-1 entries (index is 1-relative)
     last_flag = 0
     zone_list = deque()
     num_zones = 0
@@ -185,22 +160,13 @@ class ZipRespondingService(Service, ZipService):
       data_length += 1 + len(zone_name)
     else:
       last_flag = 1
-    #TODO should this reply directly through rx_port rather than routing?
-    router.route(Datagram(hop_count=0,
-                          destination_network=datagram.source_network,
-                          source_network=0,
-                          destination_node=datagram.source_node,
-                          source_node=0,
-                          destination_socket=datagram.source_socket,
-                          source_socket=datagram.destination_socket,
-                          ddp_type=cls.ATP_DDP_TYPE,
-                          data=struct.pack('>BBHBBH',
-                                           cls.ATP_FUNC_TRESP | cls.ATP_EOM,
-                                           0,
-                                           tid,
-                                           last_flag,
-                                           0,
-                                           num_zones) + b''.join(zone_list)))
+    router.reply(datagram, rx_port, cls.ATP_DDP_TYPE, struct.pack('>BBHBBH',
+                                                                  cls.ATP_FUNC_TRESP | cls.ATP_EOM,
+                                                                  0,
+                                                                  tid,
+                                                                  last_flag,
+                                                                  0,
+                                                                  num_zones) + b''.join(zone_list))
   
   def _run(self, router):
     self.started_event.set()
@@ -213,7 +179,7 @@ class ZipRespondingService(Service, ZipService):
         if datagram.data[0] in (self.ZIP_FUNC_REPLY, self.ZIP_FUNC_EXT_REPLY):
           self._reply(router, datagram)
         elif datagram.data[0] == self.ZIP_FUNC_QUERY:
-          self._query(router, datagram)
+          self._query(router, datagram, rx_port)
         elif datagram.data[0] == self.ZIP_FUNC_GETNETINFO_REQUEST:
           self._get_net_info(router, datagram, rx_port)
       elif datagram.ddp_type == self.ATP_DDP_TYPE:
@@ -221,11 +187,11 @@ class ZipRespondingService(Service, ZipService):
         control, bitmap, _, func, zero, _ = struct.unpack('>BBHBBH', datagram.data)
         if control != self.ATP_FUNC_TREQ or bitmap != 1 or zero != 0: continue
         if func == self.ZIP_ATP_FUNC_GETMYZONE:
-          self._get_my_zone(router, datagram)
+          self._get_my_zone(router, datagram, rx_port)
         elif func == self.ZIP_ATP_FUNC_GETZONELIST:
-          self._get_zone_list(router, datagram)
+          self._get_zone_list(router, datagram, rx_port, local=False)
         elif func == self.ZIP_ATP_FUNC_GETLOCALZONES:
-          self._get_zone_list(router, datagram, rx_port)
+          self._get_zone_list(router, datagram, rx_port, local=True)
     self.stopped_event.set()
   
   def inbound(self, datagram, rx_port):
