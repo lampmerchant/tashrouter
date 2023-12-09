@@ -26,105 +26,97 @@ class ZoneInformationTable:
   
   def __init__(self):
     #TODO keep track of default zone name for each network
-    self._network_to_zone_name_set = {}
-    self._zone_name_to_network_set = {}
+    self._network_min_to_network_max = {}
+    self._network_min_to_zone_name_set = {}
+    self._zone_name_to_network_min_set = {}
     self._ucased_zone_name_to_zone_name = {}
     self._lock = Lock()
   
-  def add_networks_to_zone(self, zone_name, networks):
-    '''Add networks to a zone, adding the zone if it isn't in the table.'''
+  def _check_range(self, network_min, network_max=None):
+    looked_up_network_max = self._network_min_to_network_max.get(network_min)
+    if network_max is None:
+      if looked_up_network_max is None:
+        raise ValueError('network range %d-? does not exist' % network_min)
+      else:
+        return looked_up_network_max
+    elif looked_up_network_max == network_max:  # if network range exists as given
+      return network_max
+    elif looked_up_network_max is not None:
+      raise ValueError('network range %d-%d overlaps %d-%d' % (network_min, network_max, network_min, looked_up_network_max))
+    else:  # check for overlap
+      for existing_min, existing_max in self._network_min_to_network_max.items():
+        if existing_min > network_max or existing_max < network_min: continue
+        raise ValueError('network range %d-%d overlaps %d-%d' % (network_min, network_max, existing_min, existing_max))
+      return None
+  
+  #def add_networks_to_zone(self, zone_name, networks):
+  def add_networks_to_zone(self, zone_name, network_min, network_max=None):
+    '''Add a range of networks to a zone, adding the zone if it isn't in the table.'''
+    
+    if network_max and network_max < network_min: raise ValueError('range %d-%d is backwards' % (network_min, network_max))
+    ucased_zone_name = ucase(zone_name)
+    
     with self._lock:
-      ucased_zone_name = ucase(zone_name)
+      
+      check_range = self._check_range(network_min, network_max)
+      if check_range:
+        network_max = check_range
+      else:
+        self._network_min_to_network_max[network_min] = network_max
+        self._network_min_to_zone_name_set[network_min] = set()
+      
       if ucased_zone_name in self._ucased_zone_name_to_zone_name:
         zone_name = self._ucased_zone_name_to_zone_name[ucased_zone_name]
-        networks = set(networks)
-        self._zone_name_to_network_set[zone_name] |= networks
       else:
         self._ucased_zone_name_to_zone_name[ucased_zone_name] = zone_name
-        networks = self._zone_name_to_network_set[zone_name] = set(networks)
-      for network in networks:
-        if network in self._network_to_zone_name_set:
-          self._network_to_zone_name_set[network].add(zone_name)
-        else:
-          self._network_to_zone_name_set[network] = set((zone_name,))
+        self._zone_name_to_network_min_set[zone_name] = set()
+      
+      self._network_min_to_zone_name_set[network_min].add(zone_name)
+      self._zone_name_to_network_min_set[zone_name].add(network_min)
   
-  def remove_networks_from_zone(self, zone_name, networks):
-    '''Remove networks from a zone, removing the zone if its network set is empty.'''
+  def remove_networks(self, network_min, network_max=None):
+    '''Remove a range of networks from all zones, removing associated zones if now empty of networks.'''
+    if network_max and network_max < network_min: raise ValueError('range %d-%d is backwards' % (network_min, network_max))
     with self._lock:
-      ucased_zone_name = ucase(zone_name)
-      zone_name = self._ucased_zone_name_to_zone_name.get(ucased_zone_name)
-      if not zone_name: return
-      s = self._zone_name_to_network_set[zone_name]
-      networks = set(networks)
-      s -= networks
-      if not s:
-        self._zone_name_to_network_set.pop(zone_name)
-        self._ucased_zone_name_to_zone_name.pop(ucased_zone_name)
-      for network in networks:
-        s = self._network_to_zone_name_set[network]
-        s.discard(zone_name)
-        if not s: self._network_to_zone_name_set.pop(network)
-  
-  def remove_networks(self, networks):
-    '''Remove networks from all zones, removing associated zones if now empty of networks.'''
-    with self._lock:
-      zones_affected = set()
-      for network in networks:
-        for zone_name in self._network_to_zone_name_set.pop(network):
-          zones_affected.add(zone_name)
-          self._zone_name_to_network_set[zone_name].remove(network)
-      for zone_name in zones_affected:
-        if not self._zone_name_to_network_set[zone_name]:
-          self._zone_name_to_network_set.pop(zone_name)
+      if not self._check_range(network_min, network_max): return
+      for zone_name in self._network_min_to_zone_name_set[network_min]:
+        s = self._zone_name_to_network_min_set[zone_name]
+        s.remove(network_min)
+        if not s:
+          self._zone_name_to_network_min_set.pop(zone_name)
           self._ucased_zone_name_to_zone_name.pop(ucase(zone_name))
+      self._network_min_to_zone_name_set.pop(network_min)
+      self._network_min_to_network_max.pop(network_min)
   
   def zones(self):
     '''Return the zones in this ZIT.'''
     with self._lock:
-      return list(self._zone_name_to_network_set.keys())
-  
-  def zones_and_networks(self):
-    '''Yield (zone name, tuple of network numbers) tuples for each zone in this ZIT.'''
-    with self._lock:
-      retval = deque()
-      for zone_name, network_set in self._zone_name_to_network_set.items(): retval.append((zone_name, tuple(network_set)))
-    yield from retval
-  
-  def networks_and_zones(self):
-    '''Yield (network number, tuple of zone names) tuples for each network in this ZIT.'''
-    with self._lock:
-      retval = deque()
-      for network, zone_name_set in self._network_to_zone_name_set.items(): retval.append((network, tuple(zone_name_set)))
-    yield from retval
+      return list(self._zone_name_to_network_min_set.keys())
   
   def zones_in_network(self, network):
     '''Yield the names of all zones in the network with the given number.'''
     with self._lock:
-      try:
-        retval = deque(self._network_to_zone_name_set[network])
-      except KeyError:
+      for network_min, network_max in self._network_min_to_network_max.items():
+        if network_min <= network <= network_max: break
+      else:
         return
+      retval = deque(self._network_min_to_zone_name_set[network_min])
     yield from retval
   
-  def zones_in_network_range(self, network_min, network_max):
-    '''Yield the names of all zones in the networks inside the given range.'''
+  def zones_in_network_range(self, network_min, network_max=None):
+    '''Yield the names of all zones in the given range of networks.'''
+    if network_max and network_max < network_min: raise ValueError('range %d-%d is backwards' % (network_min, network_max))
     with self._lock:
-      retval = set()
-      for network in range(network_min, network_max + 1):
-        retval.update(self._network_to_zone_name_set.get(network, ()))
+      if not self._check_range(network_min, network_max): return
+      retval = deque(self._network_min_to_zone_name_set[network_min])
     yield from retval
   
   def networks_in_zone(self, zone_name):
     '''Yield the network numbers of all networks in the given zone.'''
     with self._lock:
-      try:
-        retval = deque(self._zone_name_to_network_set[self._ucased_zone_name_to_zone_name[ucase(zone_name)]])
-      except KeyError:
-        return
-    yield from retval
-  
-  def networks_not_known(self, networks):
-    '''Yield the network numbers from the given iterable that we don't know the zones for.'''
-    with self._lock:
-      retval = deque(network for network in networks if network not in self._network_to_zone_name_set)
+      zone_name = self._ucased_zone_name_to_zone_name.get(ucase(zone_name))
+      if zone_name is None: return
+      retval = deque()
+      for network_min in self._zone_name_to_network_min_set[zone_name]:
+        retval.extend(range(network_min, self._network_min_to_network_max[network_min] + 1))
     yield from retval

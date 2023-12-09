@@ -33,34 +33,37 @@ class ZipRespondingService(Service, ZipService):
     self.stopped_event.wait()
   
   def _reply(self, router, datagram):
+    #TODO this was rewritten in haste, better look over it once the ink has dried
+    
     if len(datagram.data) < 2: return
     func, count = struct.unpack('>BB', datagram.data[:2])
     data = datagram.data[2:]
+    
+    networks_and_zone_names = deque()
+    while len(data) >= 3:
+      network, zone_name_length = struct.unpack('>HB', data[:3])
+      zone_name = data[3:3 + zone_name_length]
+      if len(zone_name) != zone_name_length: break
+      data = data[3 + zone_name_length:]
+      if zone_name_length == 0: continue
+      networks_and_zone_names.append((network, zone_name))
+    if not networks_and_zone_names: return
+    
+    network_min_to_network_max = {}
+    for entry in router.routing_table:
+      network_min_to_network_max[entry.network_min] = entry.network_max
+    
     if func == self.ZIP_FUNC_REPLY:
-      networks_to_add_by_zone_name = {}
-      while len(data) >= 3:
-        network, zone_name_length = struct.unpack('>HB', data[:3])
-        zone_name = data[3:3 + zone_name_length]
-        if len(zone_name) != zone_name_length: break
-        data = data[3 + zone_name_length:]
-        if zone_name_length == 0: continue
-        if zone_name not in networks_to_add_by_zone_name: networks_to_add_by_zone_name[zone_name] = set()
-        networks_to_add_by_zone_name[zone_name].add(network)
-      for zone_name, networks in networks_to_add_by_zone_name.items():
-        router.zone_information_table.add_networks_to_zone(zone_name, networks)
+      for network_min, zone_name in networks_and_zone_names:
+        router.zone_information_table.add_networks_to_zone(zone_name, network_min, network_min_to_network_max[network_min])
     elif func == self.ZIP_FUNC_EXT_REPLY:
-      network = None
-      while len(data) >= 3:
-        network, zone_name_length = struct.unpack('>HB', data[:3])
-        zone_name = data[3:3 + zone_name_length]
-        if len(zone_name) != zone_name_length: break
-        data = data[3 + zone_name_length:]
-        if zone_name_length == 0: continue
-        if network not in self._pending_network_zone_name_set: self._pending_network_zone_name_set[network] = set()
-        self._pending_network_zone_name_set[network].add(zone_name)
-      if network is not None and len(self._pending_network_zone_name_set.get(network, ())) >= count and count >= 1:
-        for zone_name in self._pending_network_zone_name_set.pop(network):
-          router.zone_information_table.add_networks_to_zone(zone_name, (network,))
+      network_min = None
+      for network_min, zone_name in networks_and_zone_names:
+        if network_min not in self._pending_network_zone_name_set: self._pending_network_zone_name_set[network_min] = set()
+        self._pending_network_zone_name_set[network_min].add(zone_name)
+      if network_min is not None and len(self._pending_network_zone_name_set.get(network_min, ())) >= count and count >= 1:
+        for zone_name in self._pending_network_zone_name_set.pop(network_min):
+          router.zone_information_table.add_networks_to_zone(zone_name, network_min, network_min_to_network_max[network_min])
   
   @staticmethod
   def _networks_zone_list(zit, networks):
@@ -106,6 +109,7 @@ class ZipRespondingService(Service, ZipService):
     default_zone_name = None
     number_of_zones = 0
     multicast_address = b''
+    #TODO this should be returning the "default zone", not just any zone, if the given one is invalid
     for zone_name in router.zone_information_table.zones_in_network_range(rx_port.network_min, rx_port.network_max):
       number_of_zones += 1
       if default_zone_name is None:
@@ -117,6 +121,7 @@ class ZipRespondingService(Service, ZipService):
       if number_of_zones > 1:
         flags &= ~cls.ZIP_GETNETINFO_ONLY_ONE_ZONE
         if not flags & cls.ZIP_GETNETINFO_ZONE_INVALID: break
+    if number_of_zones == 0: return
     if not multicast_address: flags |= cls.ZIP_GETNETINFO_USE_BROADCAST
     reply_data = b''.join((
       struct.pack('>BBHHB', cls.ZIP_FUNC_GETNETINFO_REPLY, flags, rx_port.network_min, rx_port.network_max, len(given_zone_name)),

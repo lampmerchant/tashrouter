@@ -97,6 +97,7 @@ class RoutingTable:
         if self._state_by_entry[entry] == self.STATE_WORST:
           entries_to_delete.add(entry)
           self._state_by_entry.pop(entry)
+          self._zone_information_table.remove_networks(entry.network_min, entry.network_max)
         elif self._state_by_entry[entry] == self.STATE_BAD:
           self._state_by_entry[entry] = self.STATE_WORST
         elif self._state_by_entry[entry] == self.STATE_SUS:
@@ -106,7 +107,6 @@ class RoutingTable:
       for network, entry in self._entry_by_network.items():
         if entry in entries_to_delete: networks_to_delete.append(network)
       for network in networks_to_delete: self._entry_by_network.pop(network)
-      self._zone_information_table.remove_networks(networks_to_delete)
   
   def entries(self):
     '''Yield entries from this RoutingTable along with their badness state.'''
@@ -122,9 +122,10 @@ class RoutingTable:
         if entry.port is port and entry.distance == 0:
           entries_to_delete.add(entry)
           networks_to_delete.append(network)
-      for entry in entries_to_delete: self._state_by_entry.pop(entry)
+      for entry in entries_to_delete:
+        self._state_by_entry.pop(entry)
+        self._zone_information_table.remove_networks(entry.network_min, entry.network_max)
       for network in networks_to_delete: self._entry_by_network.pop(network)
-      self._zone_information_table.remove_networks(networks_to_delete)
       entry = RoutingTableEntry(network_min=network_min,
                                 network_max=network_max,
                                 distance=0,

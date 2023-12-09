@@ -36,38 +36,29 @@ class ZipSendingService(Service, ZipService):
     while True:
       if self.stop_requested_event.wait(timeout=self.timeout): break
       for entry in router.routing_table:
-        query_data_blocks = deque()
-        query_data_block = deque()
-        for network in chain(router.zone_information_table.networks_not_known(range(entry.network_min, entry.network_max + 1)),
-                             (None,)):
-          if network is None or len(query_data_block) == (Datagram.MAX_DATA_LENGTH - 2) // 2:
-            if query_data_block:
-              query_data_block.appendleft(struct.pack('>BB', self.ZIP_FUNC_QUERY, len(query_data_block)))
-              query_data_blocks.append(b''.join(query_data_block))
-            if network is not None: query_data_block = deque((struct.pack('>H', network),))
-          else:
-            query_data_block.append(struct.pack('>H', network))
-        for query_data_block in query_data_blocks:
-          if entry.distance == 0:
-            entry.port.send(0x0000, 0xFF, Datagram(hop_count=0,
-                                                   destination_network=0x0000,
-                                                   source_network=entry.port.network,
-                                                   destination_node=0xFF,
-                                                   source_node=entry.port.node,
-                                                   destination_socket=self.ZIP_SAS,
-                                                   source_socket=self.ZIP_SAS,
-                                                   ddp_type=self.ZIP_DDP_TYPE,
-                                                   data=query_data_block))
-          else:
-            entry.port.send(entry.next_network, entry.next_node, Datagram(hop_count=0,
-                                                                          destination_network=entry.next_network,
-                                                                          source_network=entry.port.network,
-                                                                          destination_node=entry.next_node,
-                                                                          source_node=entry.port.node,
-                                                                          destination_socket=self.ZIP_SAS,
-                                                                          source_socket=self.ZIP_SAS,
-                                                                          ddp_type=self.ZIP_DDP_TYPE,
-                                                                          data=query_data_block))
+        #TODO make this more efficient - combine together queries with the same destination
+        if next(router.zone_information_table.zones_in_network_range(entry.network_min, entry.network_max), None): continue
+        if entry.distance == 0:
+          entry.port.send(0x0000, 0xFF, Datagram(hop_count=0,
+                                                 destination_network=0x0000,
+                                                 source_network=entry.port.network,
+                                                 destination_node=0xFF,
+                                                 source_node=entry.port.node,
+                                                 destination_socket=self.ZIP_SAS,
+                                                 source_socket=self.ZIP_SAS,
+                                                 ddp_type=self.ZIP_DDP_TYPE,
+                                                 data=struct.pack('>BBH', self.ZIP_FUNC_QUERY, 1, entry.network_min)))
+        else:
+          entry.port.send(entry.next_network, entry.next_node, Datagram(hop_count=0,
+                                                                        destination_network=entry.next_network,
+                                                                        source_network=entry.port.network,
+                                                                        destination_node=entry.next_node,
+                                                                        source_node=entry.port.node,
+                                                                        destination_socket=self.ZIP_SAS,
+                                                                        source_socket=self.ZIP_SAS,
+                                                                        ddp_type=self.ZIP_DDP_TYPE,
+                                                                        data=struct.pack('>BBH', self.ZIP_FUNC_QUERY, 1, 
+                                                                                         entry.network_min)))
     self.stopped_event.set()
   
   def inbound(self, datagram, rx_port):

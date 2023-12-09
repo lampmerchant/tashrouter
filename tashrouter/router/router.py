@@ -11,7 +11,8 @@ class Router:
     self.ports = ports
     self.services = services
     self.zone_information_table = ZoneInformationTable()
-    for zone_name, networks in seed_zones.items(): self.zone_information_table.add_networks_to_zone(zone_name, networks)
+    for zone_name, network_min, network_max in seed_zones:
+      self.zone_information_table.add_networks_to_zone(zone_name, network_min, network_max)
     self._services_by_sas = {}
     for sas, service in self.services:
       if sas is not None: self._services_by_sas[sas] = service
