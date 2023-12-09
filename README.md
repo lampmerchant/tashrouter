@@ -27,7 +27,7 @@ from tashrouter.service.zip.sending import ZipSendingService
 router = Router(ports=(
   LtoudpPort(network=1),
   TashTalkPort('/dev/ttyAMA0', network=2),
-  MacvtapPort(macvtap='macvtap0', network_min=3, network_max=5),
+  MacvtapPort(macvtap_name='macvtap0', network_min=3, network_max=5),
 ), services=(
   (EchoService.ECHO_SAS, EchoService()),
   (NameInformationService.NBP_SAS, NameInformationService()),
