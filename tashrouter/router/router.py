@@ -2,6 +2,7 @@
 
 from .routing_table import RoutingTable
 from .zone_information_table import ZoneInformationTable
+from ..datagram import Datagram
 
 
 class Router:

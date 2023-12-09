@@ -7,7 +7,6 @@ from threading import Thread, Event
 
 from . import RtmpService
 from .. import Service
-from ...datagram import Datagram
 from ...router.routing_table import RoutingTableEntry
 
 

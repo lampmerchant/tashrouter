@@ -4,7 +4,6 @@ from queue import Queue
 from threading import Thread, Event
 
 from . import Service
-from ..datagram import Datagram
 
 
 class EchoService(Service):

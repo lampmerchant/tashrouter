@@ -1,7 +1,5 @@
 '''ZIP (Zone Information Protocol) sending service.'''
 
-from collections import deque
-from itertools import chain
 import struct
 from threading import Thread, Event
 
