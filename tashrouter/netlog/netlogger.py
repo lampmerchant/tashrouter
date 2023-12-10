@@ -56,6 +56,7 @@ class NetLogger:
   
   def log_datagram_multicast(self, zone_name, datagram, port):
     if not self._logging_on: return
+    zone_name = zone_name.decode('mac_roman', 'replace')
     self._log_str('out to %s' % zone_name, port.short_str(), datagram_header(datagram), datagram.data)
   
   def log_ethernet_frame_inbound(self, frame_data, port):

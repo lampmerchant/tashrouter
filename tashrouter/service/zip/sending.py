@@ -1,5 +1,7 @@
 '''ZIP (Zone Information Protocol) sending service.'''
 
+from collections import deque
+from itertools import chain
 import struct
 from threading import Thread, Event
 
@@ -30,33 +32,42 @@ class ZipSendingService(Service, ZipService):
     self.stopped_event.wait()
   
   def _run(self, router):
+    
     self.started_event.set()
+    
     while True:
+      
       if self.stop_requested_event.wait(timeout=self.timeout): break
+      
+      queries = {}  # (port, network, node) -> network_mins
       for entry in router.routing_table:
-        #TODO make this more efficient - combine together queries with the same destination
         if next(router.zone_information_table.zones_in_network_range(entry.network_min, entry.network_max), None): continue
         if entry.distance == 0:
-          entry.port.send(0x0000, 0xFF, Datagram(hop_count=0,
-                                                 destination_network=0x0000,
-                                                 source_network=entry.port.network,
-                                                 destination_node=0xFF,
-                                                 source_node=entry.port.node,
-                                                 destination_socket=self.ZIP_SAS,
-                                                 source_socket=self.ZIP_SAS,
-                                                 ddp_type=self.ZIP_DDP_TYPE,
-                                                 data=struct.pack('>BBH', self.ZIP_FUNC_QUERY, 1, entry.network_min)))
+          key = (entry.port, 0x0000, 0xFF)
         else:
-          entry.port.send(entry.next_network, entry.next_node, Datagram(hop_count=0,
-                                                                        destination_network=entry.next_network,
-                                                                        source_network=entry.port.network,
-                                                                        destination_node=entry.next_node,
-                                                                        source_node=entry.port.node,
-                                                                        destination_socket=self.ZIP_SAS,
-                                                                        source_socket=self.ZIP_SAS,
-                                                                        ddp_type=self.ZIP_DDP_TYPE,
-                                                                        data=struct.pack('>BBH', self.ZIP_FUNC_QUERY, 1, 
-                                                                                         entry.network_min)))
+          key = (entry.port, entry.next_network, entry.next_node)
+        if key not in queries: queries[key] = deque()
+        queries[key].append(entry.network_min)
+      
+      for port_network_node, network_mins in queries.items():
+        port, network, node = port_network_node
+        datagram_data = deque()
+        for network_min in chain(network_mins, (None,)):
+          if network_min is None or len(datagram_data) * 2 + 4 > Datagram.MAX_DATA_LENGTH:
+            datagram_data.appendleft(struct.pack('>BB', self.ZIP_FUNC_QUERY, len(datagram_data)))
+            port.send(network, node, Datagram(hop_count=0,
+                                              destination_network=network,
+                                              source_network=port.network,
+                                              destination_node=node,
+                                              source_node=port.node,
+                                              destination_socket=self.ZIP_SAS,
+                                              source_socket=self.ZIP_SAS,
+                                              ddp_type=self.ZIP_DDP_TYPE,
+                                              data=b''.join(datagram_data)))
+            if network_min is not None: datagram_data = deque((struct.pack('>H', network_min),))
+          else:
+            datagram_data.append(struct.pack('>H', network_min))
+      
     self.stopped_event.set()
   
   def inbound(self, datagram, rx_port):

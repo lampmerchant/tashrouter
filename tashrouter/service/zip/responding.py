@@ -33,7 +33,6 @@ class ZipRespondingService(Service, ZipService):
     self.stopped_event.wait()
   
   def _reply(self, router, datagram):
-    #TODO this was rewritten in haste, better look over it once the ink has dried
     
     if len(datagram.data) < 2: return
     func, count = struct.unpack('>BB', datagram.data[:2])
@@ -57,6 +56,7 @@ class ZipRespondingService(Service, ZipService):
       for network_min, zone_name in networks_and_zone_names:
         router.zone_information_table.add_networks_to_zone(zone_name, network_min, network_min_to_network_max[network_min])
     elif func == self.ZIP_FUNC_EXT_REPLY:
+      #TODO this code is fragile and I do not like it
       network_min = None
       for network_min, zone_name in networks_and_zone_names:
         if network_min not in self._pending_network_zone_name_set: self._pending_network_zone_name_set[network_min] = set()
@@ -80,7 +80,6 @@ class ZipRespondingService(Service, ZipService):
     networks_zone_list = list(cls._networks_zone_list(router.zone_information_table, networks))
     networks_zone_list_byte_length = sum(len(list_item) for network, list_item in networks_zone_list)
     if networks_zone_list_byte_length + 2 <= Datagram.MAX_DATA_LENGTH:
-      #TODO should be len(networks_zone_list) instead of len(networks)?
       router.reply(datagram, rx_port, cls.ZIP_DDP_TYPE, struct.pack('>BB', cls.ZIP_FUNC_REPLY, len(networks))
                    + b''.join(list_item for network, list_item in networks_zone_list))
     else:
