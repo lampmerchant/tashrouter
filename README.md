@@ -12,6 +12,7 @@ Early days!  Basically functional but a long way from mature.
 import logging
 import time
 
+import tashrouter.netlog
 from tashrouter.port.ethertalk.macvtap import MacvtapPort
 from tashrouter.port.localtalk.ltoudp import LtoudpPort
 from tashrouter.port.localtalk.tashtalk import TashTalkPort
@@ -25,7 +26,8 @@ from tashrouter.service.zip.responding import ZipRespondingService
 from tashrouter.service.zip.sending import ZipSendingService
 
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(module)s %(levelname)s: %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s')
+tashrouter.netlog.set_log_str_func(logging.debug)  # comment out for speed/less chattiness
 
 router = Router(ports=(
   LtoudpPort(network=1),
