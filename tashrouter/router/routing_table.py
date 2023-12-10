@@ -2,6 +2,7 @@
 
 import dataclasses
 from collections import deque
+import logging
 from threading import Lock
 
 from ..port import Port
@@ -86,6 +87,7 @@ class RoutingTable:
       if cur_entry: self._state_by_entry.pop(cur_entry)
       self._state_by_entry[entry] = self.STATE_GOOD
       for network in range(entry.network_min, entry.network_max + 1): self._entry_by_network[network] = entry
+      logging.debug('adding: %s', str(entry))
       return True
   
   def age(self):
@@ -98,6 +100,7 @@ class RoutingTable:
           entries_to_delete.add(entry)
           self._state_by_entry.pop(entry)
           self._zone_information_table.remove_networks(entry.network_min, entry.network_max)
+          logging.debug('aging out: %s', str(entry))
         elif self._state_by_entry[entry] == self.STATE_BAD:
           self._state_by_entry[entry] = self.STATE_WORST
         elif self._state_by_entry[entry] == self.STATE_SUS:
@@ -123,6 +126,7 @@ class RoutingTable:
           entries_to_delete.add(entry)
           networks_to_delete.append(network)
       for entry in entries_to_delete:
+        logging.debug('deleting: %s', str(entry))
         self._state_by_entry.pop(entry)
         self._zone_information_table.remove_networks(entry.network_min, entry.network_max)
       for network in networks_to_delete: self._entry_by_network.pop(network)
@@ -132,5 +136,6 @@ class RoutingTable:
                                 port=port,
                                 next_network=0,
                                 next_node=0)
+      logging.debug('adding: %s', str(entry))
       for network in range(network_min, network_max + 1): self._entry_by_network[network] = entry
       self._state_by_entry[entry] = self.STATE_GOOD

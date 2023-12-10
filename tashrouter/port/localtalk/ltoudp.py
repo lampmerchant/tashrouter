@@ -7,6 +7,7 @@ import struct
 from threading import Thread, Event
 
 from . import LocalTalkPort
+from ...netlog import log_localtalk_frame_inbound, log_localtalk_frame_outbound
 
 
 class LtoudpPort(LocalTalkPort):
@@ -15,9 +16,11 @@ class LtoudpPort(LocalTalkPort):
   LTOUDP_GROUP = '239.192.76.84'  # the last two octets spell 'LT'
   LTOUDP_PORT = 1954
   
+  DEFAULT_INTF_ADDRESS = '0.0.0.0'
+  
   SELECT_TIMEOUT = 0.25  # seconds
   
-  def __init__(self, intf_address='0.0.0.0', network=0):
+  def __init__(self, intf_address=DEFAULT_INTF_ADDRESS, network=0):
     super().__init__(network=network, respond_to_enq=True)
     self._intf_address = intf_address
     self._socket = None
@@ -26,6 +29,15 @@ class LtoudpPort(LocalTalkPort):
     self._started_event = Event()
     self._stop_requested = False
     self._stopped_event = Event()
+  
+  def short_str(self):
+    if self._intf_address == self.DEFAULT_INTF_ADDRESS:
+      return 'LToUDP'
+    else:
+      return self._intf_address
+  
+  __str__ = short_str
+  __repr__ = short_str
   
   def start(self, router):
     super().start(router)
@@ -48,6 +60,7 @@ class LtoudpPort(LocalTalkPort):
     self._stopped_event.wait()
   
   def send_packet(self, packet_data):
+    log_localtalk_frame_outbound(packet_data, self)
     self._socket.sendto(self._sender_id + packet_data, (self.LTOUDP_GROUP, self.LTOUDP_PORT))
   
   def _run(self):
@@ -58,5 +71,6 @@ class LtoudpPort(LocalTalkPort):
       data, sender_addr = self._socket.recvfrom(65507)
       if len(data) < 7: continue
       if data[0:4] == self._sender_id: continue  #TODO check sender_addr too
+      log_localtalk_frame_inbound(data[4:], self)
       self.inbound_packet(data[4:])
     self._stopped_event.set()

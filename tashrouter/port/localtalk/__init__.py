@@ -1,9 +1,11 @@
 '''Superclass for LocalTalk Ports.'''
 
+import logging
 from threading import Thread, Event, Lock
 
 from .. import Port
 from ...datagram import Datagram
+from ...netlog import log_datagram_inbound, log_datagram_outbound, log_datagram_multicast
 
 
 class FcsCalculator:
@@ -94,7 +96,9 @@ class LocalTalkPort(Port):
   def inbound_packet(self, packet_data):
     # data packet
     if not packet_data[2] & 0x80 and len(packet_data) >= 8:
-      self._router.inbound(Datagram.from_llap_packet_bytes(packet_data), self)
+      datagram = Datagram.from_llap_packet_bytes(packet_data)
+      log_datagram_inbound(self.network, self.node, datagram, self)
+      self._router.inbound(datagram, self)
     # we've settled on a node address and someone else is asking if they can use it, we say no
     elif packet_data[2] == self.LLAP_ENQ and self._respond_to_enq and self.node and self.node == packet_data[0]:
       self.send_packet(bytes((self.node, self.node, self.LLAP_ACK)))
@@ -116,17 +120,20 @@ class LocalTalkPort(Port):
   def send(self, network, node, datagram):
     if network not in (0, self.network): return
     if self.node == 0: return
+    log_datagram_outbound(network, node, datagram, self)
     if datagram.destination_network == datagram.source_network and datagram.destination_network in (0, self.network):
       self.send_packet(bytes((node, self.node, 1)) + datagram.as_short_header_bytes())
     else:
       self.send_packet(bytes((node, self.node, 2)) + datagram.as_long_header_bytes())
   
-  def multicast(self, _, datagram):
+  def multicast(self, zone_name, datagram):
     if self.node == 0: return
+    log_datagram_multicast(zone_name, datagram, self)
     self.send_packet(bytes((0xFF, self.node, 1)) + datagram.as_short_header_bytes())
   
   def set_network_range(self, network_min, network_max):
     if network_min != network_max: return  # we're a nonextended network, we can't be set to a range of networks
+    logging.info('%s assigned network number %d', str(self), network_min)
     self.network = self.network_min = self.network_max = network_min
     self._router.routing_table.set_port_range(self, self.network, self.network)
   
@@ -140,7 +147,9 @@ class LocalTalkPort(Port):
     while not self._node_stop_event.wait(self.ENQ_INTERVAL):
       with self._node_lock:
         if self._desired_node_attempts >= self.ENQ_ATTEMPTS:
+          logging.info('%s claiming node address %d', str(self), self._desired_node)
           self.set_node_id(self._desired_node)
+          break
         else:
           self.send_packet(bytes((self._desired_node, self._desired_node, self.LLAP_ENQ)))
           self._desired_node_attempts += 1

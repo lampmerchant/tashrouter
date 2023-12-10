@@ -1,6 +1,7 @@
 '''Superclass for EtherTalk Ports.'''
 
 from collections import deque
+import logging
 import random
 import struct
 from threading import Thread, Event, Lock
@@ -8,6 +9,8 @@ import time
 
 from .. import Port
 from ...datagram import Datagram, ddp_checksum
+from ...netlog import log_datagram_inbound, log_datagram_outbound, log_datagram_multicast
+from ...netlog import log_ethernet_frame_inbound, log_ethernet_frame_outbound
 from ...router.zone_information_table import ucase
 
 
@@ -89,7 +92,9 @@ class EtherTalkPort(Port):
   def _send_frame(self, hw_addr, payload):
     '''Send a payload to an Ethernet address, padding if necessary.'''
     pad = b'\0' * (46 - len(payload)) if len(payload) < 46 else b''
-    self.send_frame(b''.join((hw_addr, self._hw_addr, struct.pack('>H', len(payload)), payload, pad)))
+    frame_data = b''.join((hw_addr, self._hw_addr, struct.pack('>H', len(payload)), payload, pad))
+    log_ethernet_frame_outbound(frame_data, self)
+    self.send_frame(frame_data)
   
   def _send_datagram(self, hw_addr, datagram):
     '''Turn a Datagram into an Ethernet frame and send it to the given address.'''
@@ -173,6 +178,7 @@ class EtherTalkPort(Port):
     while not self._acquire_network_and_node_stop_event.wait(timeout=self.AARP_PROBE_TIMEOUT):
       with self._aarp_probe_lock:
         if self._aarp_probe_attempts >= self.AARP_PROBE_RETRIES:
+          logging.info('%s claiming address %d.%d', str(self), self._desired_network, self._desired_node)
           self.network = self._desired_network
           self.node = self._desired_node
           break
@@ -202,6 +208,9 @@ class EtherTalkPort(Port):
     if frame_data[17:22] == self.SNAP_HEADER_AARP and length == 36:
       
       if frame_data[22:28] != b''.join((self.AARP_ETHERNET, self.AARP_APPLETALK, self.AARP_LENGTHS)): return
+      
+      log_ethernet_frame_inbound(frame_data, self)
+      
       func, source_hw_addr, _, source_network, source_node = struct.unpack('>H6sBHB', frame_data[28:40])
       
       if frame_data.startswith(self._hw_addr) or (func == self.AARP_REQUEST and frame_data.startswith(self.ELAP_BROADCAST_ADDR)):
@@ -211,6 +220,8 @@ class EtherTalkPort(Port):
       
     elif frame_data[17:22] == self.SNAP_HEADER_APPLETALK:
       
+      log_ethernet_frame_inbound(frame_data, self)
+      
       try:
         datagram = Datagram.from_long_header_bytes(frame_data[22:14 + length])
       except ValueError:
@@ -219,6 +230,7 @@ class EtherTalkPort(Port):
       if datagram.hop_count == 0: self._add_address_mapping(datagram.source_network, datagram.source_node, frame_data[6:12])
       if (frame_data.startswith((self._hw_addr, self.ELAP_BROADCAST_ADDR)) or
           (frame_data.startswith(self.ELAP_MULTICAST_PREFIX) and frame_data[5] <= self.ELAP_MULTICAST_ADDR_MAX)):
+        log_datagram_inbound(self.network, self.node, datagram, self)
         self._router.inbound(datagram, self)
   
   def send_frame(self, frame_data):
@@ -254,6 +266,7 @@ class EtherTalkPort(Port):
   
   def send(self, network, node, datagram):
     '''Called by Router to send a Datagram to a given network and node.'''
+    log_datagram_outbound(network, node, datagram, self)
     with self._tables_lock:
       if node == 0xFF:
         self._send_datagram(self.ELAP_BROADCAST_ADDR, datagram)
@@ -268,10 +281,12 @@ class EtherTalkPort(Port):
   
   def multicast(self, zone_name, datagram):
     '''Called by Router to make a zone-wide multicast of a Datagram.'''
+    log_datagram_multicast(zone_name, datagram, self)
     self._send_datagram(self.multicast_address(zone_name), datagram)
   
   def set_network_range(self, network_min, network_max):
     '''Called by RTMP responding service when we don't have a network range but an RTMP datagram tells us what ours is.'''
+    logging.info('%s assigned network number range %d-%d', str(self), network_min, network_max)
     self.network_min = network_min
     self.network_max = network_max
     self._router.routing_table.set_port_range(self, self.network_min, self.network_max)

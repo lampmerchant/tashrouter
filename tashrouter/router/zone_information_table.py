@@ -1,6 +1,7 @@
 '''Zone Information Table (ZIT) class and associated things.'''
 
 from collections import deque
+import logging
 from threading import Lock
 
 
@@ -49,7 +50,6 @@ class ZoneInformationTable:
         raise ValueError('network range %d-%d overlaps %d-%d' % (network_min, network_max, existing_min, existing_max))
       return None
   
-  #def add_networks_to_zone(self, zone_name, networks):
   def add_networks_to_zone(self, zone_name, network_min, network_max=None):
     '''Add a range of networks to a zone, adding the zone if it isn't in the table.'''
     
@@ -71,6 +71,7 @@ class ZoneInformationTable:
         self._ucased_zone_name_to_zone_name[ucased_zone_name] = zone_name
         self._zone_name_to_network_min_set[zone_name] = set()
       
+      logging.debug('adding network range %d-%d to zone %s', network_min, network_max, zone_name.decode('mac_roman', 'replace'))
       self._network_min_to_zone_name_set[network_min].add(zone_name)
       self._zone_name_to_network_min_set[zone_name].add(network_min)
   
@@ -78,11 +79,14 @@ class ZoneInformationTable:
     '''Remove a range of networks from all zones, removing associated zones if now empty of networks.'''
     if network_max and network_max < network_min: raise ValueError('range %d-%d is backwards' % (network_min, network_max))
     with self._lock:
-      if not self._check_range(network_min, network_max): return
+      network_max = self._check_range(network_min, network_max)
+      if not network_max: return
+      logging.debug('removing network range %d-%d from all zones', network_min, network_max)
       for zone_name in self._network_min_to_zone_name_set[network_min]:
         s = self._zone_name_to_network_min_set[zone_name]
         s.remove(network_min)
         if not s:
+          logging.debug('removing zone %s because it no longer contains any networks', zone_name.decode('mac_roman', 'replace'))
           self._zone_name_to_network_min_set.pop(zone_name)
           self._ucased_zone_name_to_zone_name.pop(ucase(zone_name))
       self._network_min_to_zone_name_set.pop(network_min)

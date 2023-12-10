@@ -19,13 +19,13 @@ class MacvtapPort(EtherTalkPort):
   
   Then pass 'macvtap0' to the constructor's macvtap parameter.  If left as None, the first macvtap found will be used.
   '''
-
+  
   SELECT_TIMEOUT = 0.25  # seconds
   
   TUNGETIFF = 0x800454D2
   TUNSETIFF = 0x400454CA
   IFF_VNET_HDR = 0x4000
-
+  
   def __init__(self, macvtap_name=None, network_min=0, network_max=0, desired_network=0, desired_node=0):
     super().__init__(None, network_min, network_max, desired_network, desired_node)
     self._reader_thread = None
@@ -39,7 +39,13 @@ class MacvtapPort(EtherTalkPort):
     self._writer_stop_flag = object()
     self._writer_stopped_event = Event()
     self._writer_queue = Queue()
-
+  
+  def short_str(self):
+    return self._macvtap_name
+  
+  __str__ = short_str
+  __repr__ = short_str
+  
   def start(self, router):
     
     if not os.path.exists('/sys/class/net/'): raise FileNotFoundError("can't find /sys/class/net/")
@@ -71,7 +77,7 @@ class MacvtapPort(EtherTalkPort):
     self._writer_thread.start()
     self._reader_started_event.wait()
     self._writer_started_event.wait()
-
+  
   def stop(self):
     self._reader_stop_requested = True
     self._writer_queue.put(self._writer_stop_flag)
@@ -79,10 +85,10 @@ class MacvtapPort(EtherTalkPort):
     self._writer_stopped_event.wait()
     os.close(self._fp)
     super().stop()
-
+  
   def send_frame(self, frame_data):
     self._writer_queue.put(frame_data)
-
+  
   def _reader_run(self):
     self._reader_started_event.set()
     while not self._reader_stop_requested:
@@ -90,7 +96,7 @@ class MacvtapPort(EtherTalkPort):
       if self._fp not in rlist: continue
       self.inbound_frame(os.read(self._fp, 65535))
     self._reader_stopped_event.set()
-
+  
   def _writer_run(self):
     self._writer_started_event.set()
     while True:

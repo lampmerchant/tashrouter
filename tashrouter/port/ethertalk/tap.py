@@ -33,6 +33,12 @@ class TapPort(EtherTalkPort):
     self._writer_stopped_event = Event()
     self._writer_queue = Queue()
   
+  def short_str(self):
+    return self._tap_name
+  
+  __str__ = short_str
+  __repr__ = short_str
+  
   def start(self, router):
     super().start(router)
     self._fp = os.open('/dev/net/tun', os.O_RDWR)

@@ -6,6 +6,7 @@ from threading import Thread, Event
 import serial
 
 from . import LocalTalkPort, FcsCalculator
+from ...netlog import log_localtalk_frame_inbound, log_localtalk_frame_outbound
 
 
 class TashTalkPort(LocalTalkPort):
@@ -15,6 +16,7 @@ class TashTalkPort(LocalTalkPort):
   
   def __init__(self, serial_port, network=0):
     super().__init__(network=network, respond_to_enq=False)
+    self._serial_port = serial_port
     self._serial_obj = serial.Serial(port=serial_port, baudrate=1000000, rtscts=True, timeout=None)
     self._reader_thread = None
     self._reader_started_event = Event()
@@ -25,6 +27,12 @@ class TashTalkPort(LocalTalkPort):
     self._writer_queue = Queue()
     self._writer_stop_flag = object()
     self._writer_stopped_event = Event()
+  
+  def short_str(self):
+    return self._serial_port.removeprefix('/dev/')
+  
+  __str__ = short_str
+  __repr__ = short_str
   
   def start(self, router):
     super().start(router)
@@ -50,6 +58,7 @@ class TashTalkPort(LocalTalkPort):
   def send_packet(self, packet_data):
     fcs = FcsCalculator()
     fcs.feed(packet_data)
+    log_localtalk_frame_outbound(packet_data, self)
     self._writer_queue.put(b''.join((b'\x01', packet_data, bytes((fcs.byte1(), fcs.byte2())))))
   
   def set_node_id(self, node):
@@ -81,7 +90,10 @@ class TashTalkPort(LocalTalkPort):
           if byte == 0xFF:  # literal 0x00 byte
             byte = 0x00
           else:
-            if byte == 0xFD and fcs.is_okay() and buf_ptr >= 5: self.inbound_packet(bytes(buf[:buf_ptr - 2]))
+            if byte == 0xFD and fcs.is_okay() and buf_ptr >= 5:
+              data = bytes(buf[:buf_ptr - 2])
+              log_localtalk_frame_inbound(data, self)
+              self.inbound_packet(data)
             fcs.reset()
             buf_ptr = 0
             continue

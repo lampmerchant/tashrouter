@@ -1,5 +1,7 @@
 '''The heart of this whole affair.'''
 
+import logging
+
 from .routing_table import RoutingTable
 from .zone_information_table import ZoneInformationTable
 from ..datagram import Datagram
@@ -26,13 +28,25 @@ class Router:
   def start(self):
     '''Start this router.'''
     # Ports are responsible for adding their seed entries to routing_table
-    for port in self.ports: port.start(self)
-    for _, service in self.services: service.start(self)
+    for port in self.ports:
+      logging.info('starting %s...', str(port.__class__.__name__))
+      port.start(self)
+    logging.info('all ports started!')
+    for _, service in self.services:
+      logging.info('starting %s...', str(service.__class__.__name__))
+      service.start(self)
+    logging.info('all services started!')
   
   def stop(self):
     '''Stop this router.'''
-    for _, service in self.services: service.stop()
-    for port in self.ports: port.stop()
+    for _, service in self.services:
+      logging.info('stopping %s...', str(service.__class__.__name__))
+      service.stop()
+    logging.info('all services stopped!')
+    for port in self.ports:
+      logging.info('stopping %s...', str(port.__class__.__name__))
+      port.stop()
+    logging.info('all ports stopped!')
   
   def inbound(self, datagram, rx_port):
     '''Called by a Port when a Datagram comes in from that port.  The Datagram may be routed, delivered, both, or neither.'''
