@@ -1,6 +1,7 @@
 '''Superclass for LocalTalk Ports.'''
 
 import logging
+import random
 from threading import Thread, Event, Lock
 
 from .. import Port
@@ -76,6 +77,8 @@ class LocalTalkPort(Port):
     self._router = None
     self._respond_to_enq = respond_to_enq
     self._desired_node = desired_node
+    self._desired_node_list = list(i for i in range(1, 0xFE + 1) if i != self._desired_node)
+    random.shuffle(self._desired_node_list)
     self._desired_node_attempts = 0
     self._node_thread = None
     self._node_lock = Lock()
@@ -107,8 +110,10 @@ class LocalTalkPort(Port):
         # someone else has responded that they're on the node address that we want
         if packet_data[2] in (self.LLAP_ENQ, self.LLAP_ACK) and not self.node and self._desired_node == packet_data[0]:
           self._desired_node_attempts = 0
-          self._desired_node -= 1
-          if self._desired_node == 0: self._desired_node = 0xFE  # lot of addresses in use here, wrap around and search again
+          self._desired_node = self._desired_node_list.pop()
+          if not self._desired_node_list:
+            self._desired_node_list = list(range(1, 0xFE + 1))
+            random.shuffle(self._desired_node_list)
   
   def send_packet(self, packet_data):
     raise NotImplementedError('subclass must override "send_packet" method')
@@ -145,12 +150,14 @@ class LocalTalkPort(Port):
     if self.network: self.set_network_range(self.network, self.network)
     self._node_started_event.set()
     while not self._node_stop_event.wait(self.ENQ_INTERVAL):
+      send_enq = None
       with self._node_lock:
         if self._desired_node_attempts >= self.ENQ_ATTEMPTS:
           logging.info('%s claiming node address %d', str(self), self._desired_node)
           self.set_node_id(self._desired_node)
           break
         else:
-          self.send_packet(bytes((self._desired_node, self._desired_node, self.LLAP_ENQ)))
+          send_enq = self._desired_node
           self._desired_node_attempts += 1
+      if send_enq: self.send_packet(bytes((send_enq, send_enq, self.LLAP_ENQ)))
     self._node_stopped_event.set()

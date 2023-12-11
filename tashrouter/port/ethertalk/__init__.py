@@ -130,18 +130,20 @@ class EtherTalkPort(Port):
   
   def _add_address_mapping(self, network, node, hw_addr):
     '''Add an address mapping for the given network, node, and Ethernet address and release any held Datagrams waiting on it.'''
+    datagrams_to_send = deque()
     with self._tables_lock:
       self._address_mapping_table[(network, node)] = (hw_addr, time.monotonic())
       if (network, node) in self._held_datagrams:
-        for datagram, _ in self._held_datagrams[(network, node)]: self._send_datagram(hw_addr, datagram)
+        for datagram, _ in self._held_datagrams[(network, node)]: datagrams_to_send.append((hw_addr, datagram))
         self._held_datagrams.pop((network, node))
+    for hw_addr, datagram in datagrams_to_send: self._send_datagram(hw_addr, datagram)
   
   def _send_aarp_requests_run(self):
     '''Thread for sending AARP requests for held Datagrams.'''
     self._send_aarp_requests_started_event.set()
     while not self._send_aarp_requests_stop_event.wait(timeout=self.HELD_DATAGRAM_AARP_REQUEST_INTERVAL):
-      with self._tables_lock:
-        for network, node in self._held_datagrams.keys(): self._send_aarp_request(network, node)
+      with self._tables_lock: aarp_requests = deque(self._held_datagrams.keys())
+      for network, node in aarp_requests: self._send_aarp_request(network, node)
     self._send_aarp_requests_stopped_event.set()
   
   def _age_held_datagrams_run(self):
@@ -176,6 +178,7 @@ class EtherTalkPort(Port):
     if self.network_min and self.network_max: self.set_network_range(self.network_min, self.network_max)
     self._acquire_network_and_node_started_event.set()
     while not self._acquire_network_and_node_stop_event.wait(timeout=self.AARP_PROBE_TIMEOUT):
+      send_aarp_probe = None
       with self._aarp_probe_lock:
         if self._aarp_probe_attempts >= self.AARP_PROBE_RETRIES:
           logging.info('%s claiming address %d.%d', str(self), self._desired_network, self._desired_node)
@@ -183,8 +186,11 @@ class EtherTalkPort(Port):
           self.node = self._desired_node
           break
         if self._desired_network and self._desired_node:
-          self._send_aarp_probe(self._desired_network, self._desired_node)
+          send_aarp_probe = (self._desired_network, self._desired_node)
           self._aarp_probe_attempts += 1
+      if send_aarp_probe:
+        desired_network, desired_node = send_aarp_probe
+        self._send_aarp_probe(desired_network, desired_node)
     self._acquire_network_and_node_stopped_event.set()
   
   def _process_aarp_frame(self, func, source_hw_addr, source_network, source_node):
@@ -267,17 +273,25 @@ class EtherTalkPort(Port):
   def send(self, network, node, datagram):
     '''Called by Router to send a Datagram to a given network and node.'''
     log_datagram_outbound(network, node, datagram, self)
+    send_datagram = None
+    send_aarp_request = None
     with self._tables_lock:
       if node == 0xFF:
-        self._send_datagram(self.ELAP_BROADCAST_ADDR, datagram)
+        send_datagram = (self.ELAP_BROADCAST_ADDR, datagram)
       elif (network, node) in self._address_mapping_table:
         hw_addr, _ = self._address_mapping_table[(network, node)]
-        self._send_datagram(hw_addr, datagram)
+        send_datagram = (hw_addr, datagram)
       elif (network, node) in self._held_datagrams:
         self._held_datagrams[(network, node)].append((datagram, time.monotonic()))
       else:
         self._held_datagrams[(network, node)] = deque(((datagram, time.monotonic()),))
-        self._send_aarp_request(network, node)
+        send_aarp_request = (network, node)
+    if send_datagram:
+      hw_addr, datagram = send_datagram
+      self._send_datagram(hw_addr, datagram)
+    if send_aarp_request:
+      network, node = send_aarp_request
+      self._send_aarp_request(network, node)
   
   def multicast(self, zone_name, datagram):
     '''Called by Router to make a zone-wide multicast of a Datagram.'''

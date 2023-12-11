@@ -51,6 +51,7 @@ class ZipSendingService(Service, ZipService):
       
       for port_network_node, network_mins in queries.items():
         port, network, node = port_network_node
+        if 0 in (port.node, port.network): continue
         datagram_data = deque()
         for network_min in chain(network_mins, (None,)):
           if network_min is None or len(datagram_data) * 2 + 4 > Datagram.MAX_DATA_LENGTH:

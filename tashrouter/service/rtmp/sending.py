@@ -39,6 +39,7 @@ class RtmpSendingService(Service, RtmpService):
         item = None
       if item is self.stop_flag: break
       for port in router.ports:
+        if 0 in (port.node, port.network): continue
         for datagram_data in self.make_routing_table_datagram_data(router, port):
           port.send(0x0000, 0xFF, Datagram(hop_count=0,
                                            destination_network=0x0000,

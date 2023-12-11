@@ -5,14 +5,29 @@ import logging
 from .routing_table import RoutingTable
 from .zone_information_table import ZoneInformationTable
 from ..datagram import Datagram
+from ..service.echo import EchoService
+from ..service.name_information import NameInformationService
+from ..service.routing_table_aging import RoutingTableAgingService
+from ..service.rtmp.responding import RtmpRespondingService
+from ..service.rtmp.sending import RtmpSendingService
+from ..service.zip.responding import ZipRespondingService
+from ..service.zip.sending import ZipSendingService
 
 
 class Router:
   '''A router, a device which sends Datagrams to Ports and runs Services.'''
   
-  def __init__(self, ports, services, seed_zones):
+  def __init__(self, ports, seed_zones):
     self.ports = ports
-    self.services = services
+    self.services = (
+      (EchoService.ECHO_SAS, EchoService()),
+      (NameInformationService.NBP_SAS, NameInformationService()),
+      (None, RoutingTableAgingService()),
+      (RtmpRespondingService.RTMP_SAS, RtmpRespondingService()),
+      (None, RtmpSendingService()),
+      (ZipRespondingService.ZIP_SAS, ZipRespondingService()),
+      (None, ZipSendingService()),
+    )
     self.zone_information_table = ZoneInformationTable()
     for zone_name, network_min, network_max in seed_zones:
       self.zone_information_table.add_networks_to_zone(zone_name, network_min, network_max)
