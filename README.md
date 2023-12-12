@@ -39,7 +39,7 @@ tashrouter.netlog.set_log_str_func(logging.debug)  # comment this line for speed
 router = Router('router', ports=(
   LtoudpPort(seed_network=1, seed_zone_name=b'LToUDP Network'),
   TashTalkPort(serial_port='/dev/ttyAMA0', seed_network=2, seed_zone_name=b'TashTalk Network'),
-  MacvtapPort(macvtap_name='macvtap0', network_min=3, network_max=5, seed_zone_names=[b'EtherTalk Network']),
+  MacvtapPort(macvtap_name='macvtap0', seed_network_min=3, seed_network_max=5, seed_zone_names=[b'EtherTalk Network']),
 ))
 print('router away!')
 router.start()
