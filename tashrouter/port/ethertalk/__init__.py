@@ -50,15 +50,27 @@ class EtherTalkPort(Port):
   HELD_DATAGRAM_AGE_INTERVAL = 1  # seconds
   HELD_DATAGRAM_AARP_REQUEST_INTERVAL = 0.25  # seconds
   
-  def __init__(self, hw_addr, network_min=0, network_max=0, desired_network=0, desired_node=0):
-    self.network_min = network_min
-    self.network_max = network_max
+  def __init__(self, hw_addr, seed_network_min=0, seed_network_max=0, seed_zone_names=(), desired_network=0, desired_node=0):
+    if seed_network_min and not seed_network_max or seed_network_max and not seed_network_min:
+      raise ValueError('seed_network_min and seed_network_max must be provided or omitted together')
+    if seed_network_min and not seed_zone_names or seed_zone_names and not seed_network_min:
+      raise ValueError('seed_network_min/max and seed_zone_names must be provided or omitted together')
+    self.network_min = seed_network_min
+    self.network_max = seed_network_max
     self.network = 0
     self.node = 0
     self.extended_network = True
     self._hw_addr = hw_addr
-    self._desired_network = desired_network
-    self._desired_node = desired_node
+    self._seed_zone_names = seed_zone_names
+    self._desired_network = 0
+    self._desired_node = 0
+    if self.network_min:
+      self._desired_network_list = [desired_network] if self.network_min <= desired_network <= self.network_max else []
+      self._desired_node_list = [desired_node] if 1 <= desired_node <= 0xFD else []
+      self._reroll_desired_network_and_node()
+    else:
+      self._desired_network_list = []
+      self._desired_node_list = []
     self._aarp_probe_attempts = 0
     self._aarp_probe_lock = Lock()
     self._router = None
@@ -82,12 +94,17 @@ class EtherTalkPort(Port):
     self._acquire_network_and_node_stop_event = Event()
     self._acquire_network_and_node_stopped_event = Event()
   
-  def _reroll_network_and_node(self):
+  def _reroll_desired_network_and_node(self):
     '''Reroll the network and node number.'''
-    if self.network_min and self.network_max:
-      self._desired_network = random.randint(self.network_min, self.network_max)
-      self._desired_node = random.randint(0x01, 0xFD)
-      self._aarp_probe_attempts = 0
+    if not self._desired_node_list:
+      if not self._desired_network_list:
+        self._desired_network_list = list(range(self.network_min, self.network_max + 1))
+        random.shuffle(self._desired_network_list)
+      self._desired_network = self._desired_network_list.pop()
+      self._desired_node_list = list(range(1, 0xFD + 1))
+      random.shuffle(self._desired_node_list)
+    self._desired_node = self._desired_node_list.pop()
+    self._aarp_probe_attempts = 0
   
   def _send_frame(self, hw_addr, payload):
     '''Send a payload to an Ethernet address, padding if necessary.'''
@@ -175,7 +192,10 @@ class EtherTalkPort(Port):
   
   def _acquire_network_and_node_run(self):
     '''Thread for acquiring a network and node number.'''
-    if self.network_min and self.network_max: self.set_network_range(self.network_min, self.network_max)
+    if self.network_min and self.network_max:
+      self._set_network_range(self.network_min, self.network_max)
+      for zone_name in self._seed_zone_names:
+        self._router.zone_information_table.add_networks_to_zone(zone_name, self.network_min, self.network_max)
     self._acquire_network_and_node_started_event.set()
     while not self._acquire_network_and_node_stop_event.wait(timeout=self.AARP_PROBE_TIMEOUT):
       send_aarp_probe = None
@@ -201,8 +221,7 @@ class EtherTalkPort(Port):
       self._add_address_mapping(source_network, source_node, source_hw_addr)
       with self._aarp_probe_lock:
         if self.network == self.node == 0 and source_network == self._desired_network and source_node == self._desired_node:
-          self._reroll_network_and_node()
-          self._aarp_probe_attempts = 0
+          self._reroll_desired_network_and_node()
   
   def inbound_frame(self, frame_data):
     '''Called by subclass with inbound Ethernet frames.'''
@@ -298,13 +317,24 @@ class EtherTalkPort(Port):
     log_datagram_multicast(zone_name, datagram, self)
     self._send_datagram(self.multicast_address(zone_name), datagram)
   
-  def set_network_range(self, network_min, network_max):
-    '''Called by RTMP responding service when we don't have a network range but an RTMP datagram tells us what ours is.'''
-    logging.info('%s assigned network number range %d-%d', str(self), network_min, network_max)
+  def _set_network_range(self, network_min, network_max):
     self.network_min = network_min
     self.network_max = network_max
     self._router.routing_table.set_port_range(self, self.network_min, self.network_max)
-    if self._desired_network == self._desired_node == 0: self._reroll_network_and_node()
+    self.network = 0
+    self.node = 0
+    with self._aarp_probe_lock:
+      self._desired_network_list = []
+      self._desired_node_list = []
+      self._reroll_desired_network_and_node()
+  
+  def set_network_range(self, network_min, network_max):
+    '''Called by RTMP responding service when we don't have a network range but an RTMP datagram tells us what ours is.'''
+    if self.network_min or self.network_max:
+      raise ValueError('%s assigned network number range %d-%d but already has %d-%d' % (str(self), network_min, network_max,
+                                                                                         self.network_min, self.network_max))
+    logging.info('%s assigned network number range %d-%d', str(self), network_min, network_max)
+    self._set_network_range(network_min, network_max)
   
   @classmethod
   def multicast_address(cls, zone_name):

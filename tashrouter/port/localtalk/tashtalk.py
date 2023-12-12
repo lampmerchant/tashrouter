@@ -14,8 +14,8 @@ class TashTalkPort(LocalTalkPort):
   
   SERIAL_TIMEOUT = 0.25  # seconds
   
-  def __init__(self, serial_port, network=0):
-    super().__init__(network=network, respond_to_enq=False)
+  def __init__(self, serial_port, seed_network=0, seed_zone_name=None):
+    super().__init__(seed_network=seed_network, seed_zone_name=seed_zone_name, respond_to_enq=False)
     self._serial_port = serial_port
     self._serial_obj = serial.Serial(port=serial_port, baudrate=1000000, rtscts=True, timeout=None)
     self._reader_thread = None

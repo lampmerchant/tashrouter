@@ -20,8 +20,8 @@ class LtoudpPort(LocalTalkPort):
   
   SELECT_TIMEOUT = 0.25  # seconds
   
-  def __init__(self, intf_address=DEFAULT_INTF_ADDRESS, network=0):
-    super().__init__(network=network, respond_to_enq=True)
+  def __init__(self, intf_address=DEFAULT_INTF_ADDRESS, seed_network=0, seed_zone_name=None):
+    super().__init__(seed_network=seed_network, seed_zone_name=seed_zone_name, respond_to_enq=True)
     self._intf_address = intf_address
     self._socket = None
     self._sender_id = None

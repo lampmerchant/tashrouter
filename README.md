@@ -1,12 +1,26 @@
 # TashRouter
 
-An AppleTalk router that supports LToUDP and TashTalk in addition to EtherTalk.
+An AppleTalk router that supports LocalTalk (via LToUDP and/or TashTalk) in addition to EtherTalk.
 
 ## Status
 
-Early days!  Basically functional but a long way from mature.
+Not mature yet, but ready for some real world experience.
 
 ## Quick Start
+
+### MACVTAP
+
+A MACVTAP device is necessary to support EtherTalk.  Not all kernels may have support for this built in; Void Linux for
+Raspberry Pi is known to have support for MACVTAP.
+
+```
+# ip link add link eth0 name macvtap0 type macvtap
+# ip link set dev macvtap0 promisc on
+```
+
+### Running TashRouter
+
+Put something like this into `test_router.py` at the same level as the `tashrouter` directory and run it:
 
 ```python
 import logging
@@ -20,16 +34,12 @@ from tashrouter.router.router import Router
 
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s')
-tashrouter.netlog.set_log_str_func(logging.debug)
+tashrouter.netlog.set_log_str_func(logging.debug)  # comment this line for speed and reduced spam
 
-router = Router(ports=(
-  LtoudpPort(network=1),
-  TashTalkPort('/dev/ttyAMA0', network=2),
-  MacvtapPort(macvtap_name='macvtap0', network_min=3, network_max=5),
-), seed_zones=(
-  (b'LToUDP Network', 1, 1),
-  (b'TashTalk Network', 2, 2),
-  (b'EtherTalk Network', 3, 5),
+router = Router('router', ports=(
+  LtoudpPort(seed_network=1, seed_zone_name=b'LToUDP Network'),
+  TashTalkPort(serial_port='/dev/ttyAMA0', seed_network=2, seed_zone_name=b'TashTalk Network'),
+  MacvtapPort(macvtap_name='macvtap0', network_min=3, network_max=5, seed_zone_names=[b'EtherTalk Network']),
 ))
 print('router away!')
 router.start()

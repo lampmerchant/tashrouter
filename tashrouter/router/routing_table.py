@@ -12,6 +12,7 @@ from ..port import Port
 class RoutingTableEntry:
   '''An entry in a routing table for a single network, used to route Datagrams to Ports.'''
   
+  extended_network: bool
   network_min: int
   network_max: int
   distance: int
@@ -28,8 +29,8 @@ class RoutingTable:
   STATE_BAD = 3
   STATE_WORST = 4
   
-  def __init__(self, zone_information_table):
-    self._zone_information_table = zone_information_table
+  def __init__(self, router):
+    self._router = router
     self._entry_by_network = {}
     self._state_by_entry = {}
     self._lock = Lock()
@@ -87,7 +88,7 @@ class RoutingTable:
       if cur_entry: self._state_by_entry.pop(cur_entry)
       self._state_by_entry[entry] = self.STATE_GOOD
       for network in range(entry.network_min, entry.network_max + 1): self._entry_by_network[network] = entry
-      logging.debug('adding: %s', str(entry))
+      logging.debug('%s adding: %s', str(self._router), str(entry))
       return True
   
   def age(self):
@@ -99,8 +100,8 @@ class RoutingTable:
         if self._state_by_entry[entry] == self.STATE_WORST:
           entries_to_delete.add(entry)
           self._state_by_entry.pop(entry)
-          self._zone_information_table.remove_networks(entry.network_min, entry.network_max)
-          logging.debug('aging out: %s', str(entry))
+          self._router.zone_information_table.remove_networks(entry.network_min, entry.network_max)
+          logging.debug('%s aging out: %s', str(self._router), str(entry))
         elif self._state_by_entry[entry] == self.STATE_BAD:
           self._state_by_entry[entry] = self.STATE_WORST
         elif self._state_by_entry[entry] == self.STATE_SUS:
@@ -126,16 +127,17 @@ class RoutingTable:
           entries_to_delete.add(entry)
           networks_to_delete.append(network)
       for entry in entries_to_delete:
-        logging.debug('deleting: %s', str(entry))
+        logging.debug('%s deleting: %s', str(self._router), str(entry))
         self._state_by_entry.pop(entry)
-        self._zone_information_table.remove_networks(entry.network_min, entry.network_max)
+        self._router.zone_information_table.remove_networks(entry.network_min, entry.network_max)
       for network in networks_to_delete: self._entry_by_network.pop(network)
-      entry = RoutingTableEntry(network_min=network_min,
+      entry = RoutingTableEntry(extended_network=port.extended_network,
+                                network_min=network_min,
                                 network_max=network_max,
                                 distance=0,
                                 port=port,
                                 next_network=0,
                                 next_node=0)
-      logging.debug('adding: %s', str(entry))
+      logging.debug('%s adding: %s', str(self._router), str(entry))
       for network in range(network_min, network_max + 1): self._entry_by_network[network] = entry
       self._state_by_entry[entry] = self.STATE_GOOD

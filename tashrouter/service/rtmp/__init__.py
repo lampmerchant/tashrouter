@@ -29,7 +29,7 @@ class RtmpService:
     this_net = None
     for entry, is_bad in router.routing_table.entries():
       distance = self.NOTIFY_NEIGHBOR if is_bad else entry.distance
-      if not entry.port.extended_network:
+      if not entry.extended_network:
         binary_tuple = struct.pack('>HB', entry.network_min, distance & 0x1F)
       else:
         binary_tuple = struct.pack('>HBHB', entry.network_min, (distance & 0x1F) | 0x80, entry.network_max, self.RTMP_VERSION)

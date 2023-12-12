@@ -10,8 +10,8 @@ from ...netlog import log_localtalk_frame_inbound, log_localtalk_frame_outbound
 class VirtualLocalTalkPort(LocalTalkPort):
   '''Virtual LocalTalk Port.'''
   
-  def __init__(self, virtual_network, short_str=None, network=0):
-    super().__init__(network=network, respond_to_enq=True)
+  def __init__(self, virtual_network, short_str=None, seed_network=0, seed_zone_name=None):
+    super().__init__(seed_network=seed_network, seed_zone_name=seed_zone_name, respond_to_enq=True)
     self._virtual_network = virtual_network
     self._short_str = short_str or 'Virtual'
   

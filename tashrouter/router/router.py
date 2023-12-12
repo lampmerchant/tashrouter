@@ -17,9 +17,10 @@ from ..service.zip.sending import ZipSendingService
 class Router:
   '''A router, a device which sends Datagrams to Ports and runs Services.'''
   
-  def __init__(self, ports, seed_zones):
+  def __init__(self, short_str, ports):
+    self._short_str = short_str
     self.ports = ports
-    self.services = (
+    self._services = (
       (EchoService.ECHO_SAS, EchoService()),
       (NameInformationService.NBP_SAS, NameInformationService()),
       (None, RoutingTableAgingService()),
@@ -28,13 +29,15 @@ class Router:
       (ZipRespondingService.ZIP_SAS, ZipRespondingService()),
       (None, ZipSendingService()),
     )
-    self.zone_information_table = ZoneInformationTable()
-    for zone_name, network_min, network_max in seed_zones:
-      self.zone_information_table.add_networks_to_zone(zone_name, network_min, network_max)
+    self.zone_information_table = ZoneInformationTable(self)
     self._services_by_sas = {}
-    for sas, service in self.services:
+    for sas, service in self._services:
       if sas is not None: self._services_by_sas[sas] = service
-    self.routing_table = RoutingTable(self.zone_information_table)
+    self.routing_table = RoutingTable(self)
+  
+  def short_str(self): return self._short_str
+  __str__ = short_str
+  __repr__ = short_str
   
   def _deliver(self, datagram, rx_port):
     '''Deliver a datagram locally to the "control plane" of the router.'''
@@ -47,14 +50,14 @@ class Router:
       logging.info('starting %s...', str(port.__class__.__name__))
       port.start(self)
     logging.info('all ports started!')
-    for _, service in self.services:
+    for _, service in self._services:
       logging.info('starting %s...', str(service.__class__.__name__))
       service.start(self)
     logging.info('all services started!')
   
   def stop(self):
     '''Stop this router.'''
-    for _, service in self.services:
+    for _, service in self._services:
       logging.info('stopping %s...', str(service.__class__.__name__))
       service.stop()
     logging.info('all services stopped!')

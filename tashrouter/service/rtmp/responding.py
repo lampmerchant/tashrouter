@@ -68,27 +68,30 @@ class RtmpRespondingService(Service, RtmpService):
           if len(packed) != 3: break
           network_min, range_distance = struct.unpack('>HB', packed)
           if range_distance & 0x80:
+            extended_network = True
             packed = data[data_idx + 3:data_idx + 6]
             if len(packed) != 3: break
             network_max, _ = struct.unpack('>HB', packed)
             data_idx += 6
           else:
+            extended_network = False
             network_max = network_min
             data_idx += 3
-          tuples.append((network_min, network_max, range_distance & 0x1F))
+          tuples.append((extended_network, network_min, network_max, range_distance & 0x1F))
         if data_idx != len(data): continue  # invalid, tuples did not end where expected
         
         # if this Port doesn't know its network range yet, accept that this is from the network's seed router
         if rx_port.network_min == rx_port.network_max == 0: rx_port.set_network_range(sender_network_min, sender_network_max)
         
         # resolve the given tuples with the current RoutingTable
-        for network_min, network_max, distance in tuples:
+        for extended_network, network_min, network_max, distance in tuples:
           # if the entry is too many hops away or is a notify-neighbor entry, mark any entry we have as bad
           if distance >= 15:
             router.routing_table.mark_bad(network_min, network_max)
           # otherwise have the table consider a new entry based on this tuple
           else:
-            router.routing_table.consider(RoutingTableEntry(network_min=network_min,
+            router.routing_table.consider(RoutingTableEntry(extended_network=extended_network,
+                                                            network_min=network_min,
                                                             network_max=network_max,
                                                             distance=distance + 1,
                                                             port=rx_port,

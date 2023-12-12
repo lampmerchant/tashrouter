@@ -25,8 +25,9 @@ def ucase(b):
 class ZoneInformationTable:
   '''Zone Information Table (ZIT).'''
   
-  def __init__(self):
+  def __init__(self, router):
     #TODO keep track of default zone name for each network
+    self._router = router
     self._network_min_to_network_max = {}
     self._network_min_to_zone_name_set = {}
     self._zone_name_to_network_min_set = {}
@@ -71,7 +72,8 @@ class ZoneInformationTable:
         self._ucased_zone_name_to_zone_name[ucased_zone_name] = zone_name
         self._zone_name_to_network_min_set[zone_name] = set()
       
-      logging.debug('adding network range %d-%d to zone %s', network_min, network_max, zone_name.decode('mac_roman', 'replace'))
+      logging.debug('%s adding network range %d-%d to zone %s', str(self._router), network_min, network_max,
+                    zone_name.decode('mac_roman', 'replace'))
       self._network_min_to_zone_name_set[network_min].add(zone_name)
       self._zone_name_to_network_min_set[zone_name].add(network_min)
   
@@ -81,12 +83,13 @@ class ZoneInformationTable:
     with self._lock:
       network_max = self._check_range(network_min, network_max)
       if not network_max: return
-      logging.debug('removing network range %d-%d from all zones', network_min, network_max)
+      logging.debug('%s removing network range %d-%d from all zones', str(self._router), network_min, network_max)
       for zone_name in self._network_min_to_zone_name_set[network_min]:
         s = self._zone_name_to_network_min_set[zone_name]
         s.remove(network_min)
         if not s:
-          logging.debug('removing zone %s because it no longer contains any networks', zone_name.decode('mac_roman', 'replace'))
+          logging.debug('%s removing zone %s because it no longer contains any networks', str(self._router),
+                        zone_name.decode('mac_roman', 'replace'))
           self._zone_name_to_network_min_set.pop(zone_name)
           self._ucased_zone_name_to_zone_name.pop(ucase(zone_name))
       self._network_min_to_zone_name_set.pop(network_min)

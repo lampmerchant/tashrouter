@@ -70,11 +70,14 @@ class LocalTalkPort(Port):
   LLAP_ENQ = 0x81
   LLAP_ACK = 0x82
   
-  def __init__(self, network=0, respond_to_enq=True, desired_node=0xFE):
-    self.network = self.network_min = self.network_max = network
+  def __init__(self, seed_network=0, seed_zone_name=None, respond_to_enq=True, desired_node=0xFE):
+    if seed_network and not seed_zone_name or seed_zone_name and not seed_network:
+      raise ValueError('seed_network and seed_zone_name must be provided or omitted together')
+    self.network = self.network_min = self.network_max = seed_network
     self.node = 0
     self.extended_network = False
     self._router = None
+    self._seed_zone_name = seed_zone_name
     self._respond_to_enq = respond_to_enq
     self._desired_node = desired_node
     self._desired_node_list = list(i for i in range(1, 0xFE + 1) if i != self._desired_node)
@@ -136,18 +139,24 @@ class LocalTalkPort(Port):
     log_datagram_multicast(zone_name, datagram, self)
     self.send_packet(bytes((0xFF, self.node, 1)) + datagram.as_short_header_bytes())
   
-  def set_network_range(self, network_min, network_max):
-    if network_min != network_max: return  # we're a nonextended network, we can't be set to a range of networks
+  def _set_network_range(self, network_min, network_max):
     logging.info('%s assigned network number %d', str(self), network_min)
     self.network = self.network_min = self.network_max = network_min
     self._router.routing_table.set_port_range(self, self.network, self.network)
+  
+  def set_network_range(self, network_min, network_max):
+    if network_min != network_max: raise ValueError('LocalTalk networks are nonextended and cannot be set to a range of networks')
+    if self.network: raise ValueError('%s assigned network number %d but already has %d' % (str(self), network_min, self.network))
+    self._set_network_range(network_min, network_max)
   
   @staticmethod
   def multicast_address(_):
     return b''  # multicast is not supported on LocalTalk
   
   def _node_run(self):
-    if self.network: self.set_network_range(self.network, self.network)
+    if self.network:
+      self._set_network_range(self.network, self.network)
+      self._router.zone_information_table.add_networks_to_zone(self._seed_zone_name, self.network, self.network)
     self._node_started_event.set()
     while not self._node_stop_event.wait(self.ENQ_INTERVAL):
       send_enq = None
