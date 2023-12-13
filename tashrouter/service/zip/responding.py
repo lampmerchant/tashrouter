@@ -65,35 +65,33 @@ class ZipRespondingService(Service, ZipService):
         for zone_name in self._pending_network_zone_name_set.pop(network_min):
           router.zone_information_table.add_networks_to_zone(zone_name, network_min, network_min_to_network_max[network_min])
   
-  @staticmethod
-  def _networks_zone_list(zit, networks):
-    for network in networks:
-      for zone_name in zit.zones_in_network(network):
-        yield network, struct.pack('>HB', network, len(zone_name)) + zone_name
-  
   @classmethod
   def _query(cls, router, datagram, rx_port):
     if len(datagram.data) < 4: return
     network_count = datagram.data[1]
     if len(datagram.data) != (network_count * 2) + 2: return
-    networks = [struct.unpack('>H', datagram.data[(i * 2) + 2:(i * 2) + 4])[0] for i in range(network_count)]
-    networks_zone_list = list(cls._networks_zone_list(router.zone_information_table, networks))
-    networks_zone_list_byte_length = sum(len(list_item) for network, list_item in networks_zone_list)
-    if networks_zone_list_byte_length + 2 <= Datagram.MAX_DATA_LENGTH:
-      router.reply(datagram, rx_port, cls.ZIP_DDP_TYPE, struct.pack('>BB', cls.ZIP_FUNC_REPLY, len(networks))
-                   + b''.join(list_item for network, list_item in networks_zone_list))
-    else:
-      zone_list_by_network = {}
-      for network, list_item in networks_zone_list:
-        if network not in zone_list_by_network: zone_list_by_network[network] = deque()
-        zone_list_by_network[network].append(list_item)
-      for network, zone_list in zone_list_by_network.items():
-        datagram_data = deque()
-        datagram_data_length = 0
-        for list_item in chain(zone_list, (None,)):
-          if list_item is None or datagram_data_length + len(list_item) > Datagram.MAX_DATA_LENGTH - 2:
-            router.reply(datagram, rx_port, cls.ZIP_DDP_TYPE, struct.pack('>BB', cls.ZIP_FUNC_EXT_REPLY,
-                                                                          len(zone_list)) + b''.join(datagram_data))
+    # in imitation of AppleTalk Internet Router, we only respond with extended replies even if a regular reply would fit
+    # we also give one list per requested network even if the requested networks are in the same range and the lists are the same;
+    # that is, if the sender requests zones for networks 3 and 4 and there is a zones list for networks 3-5, we will reply with the
+    # zone list for network 3 twice... seems silly, but this is how ATIR does it so *shrug*
+    for network_idx in range(network_count):
+      requested_network = struct.unpack('>H', datagram.data[(network_idx * 2) + 2:(network_idx * 2) + 4])[0]
+      entry, _ = router.routing_table.get_by_network(requested_network)
+      if entry is None: continue
+      try:
+        zone_names = deque(router.zone_information_table.zones_in_network_range(entry.network_min))
+      except ValueError:
+        continue
+      datagram_data = deque()
+      datagram_data_length = 0
+      for zone_name in chain(zone_names, (None,)):
+        list_item = None if zone_name is None else struct.pack('>HB', entry.network_min, len(zone_name)) + zone_name
+        if list_item is None or datagram_data_length + len(list_item) > Datagram.MAX_DATA_LENGTH - 2:
+          router.reply(datagram, rx_port, cls.ZIP_DDP_TYPE, struct.pack('>BB', cls.ZIP_FUNC_EXT_REPLY,
+                                                                        len(zone_names)) + b''.join(datagram_data))
+          datagram_data = deque()
+          datagram_data_length = 0
+        if list_item is not None:
           datagram_data.append(list_item)
           datagram_data_length += len(list_item)
   
@@ -108,10 +106,10 @@ class ZipRespondingService(Service, ZipService):
     default_zone_name = None
     number_of_zones = 0
     multicast_address = b''
-    #TODO this should be returning the "default zone", not just any zone, if the given one is invalid
     for zone_name in router.zone_information_table.zones_in_network_range(rx_port.network_min, rx_port.network_max):
       number_of_zones += 1
       if default_zone_name is None:
+        # zones_in_network_range returns the default zone first
         default_zone_name = zone_name
         multicast_address = rx_port.multicast_address(zone_name)
       if ucase(zone_name) == given_zone_name_ucase:
@@ -135,7 +133,9 @@ class ZipRespondingService(Service, ZipService):
   def _get_my_zone(cls, router, datagram, rx_port):
     _, _, tid, _, _, start_index = struct.unpack('>BBHBBH', datagram.data)
     if start_index != 0: return
-    zone_name = next(router.zone_information_table.zones_in_network(datagram.source_network), None)
+    entry, _ = router.routing_table.get_by_network(datagram.source_network)
+    if entry is None: return
+    zone_name = next(router.zone_information_table.zones_in_network_range(entry.network_min), None)
     if not zone_name: return
     router.reply(datagram, rx_port, cls.ATP_DDP_TYPE, struct.pack('>BBHBBHB',
                                                                   cls.ATP_FUNC_TRESP | cls.ATP_EOM,

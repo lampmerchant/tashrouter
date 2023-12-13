@@ -7,7 +7,7 @@ class Port:
   Note that this covers only the case of a connection to an AppleTalk network, not the "half router" or "backbone network" cases
   detailed in Inside AppleTalk.
   
-  Note also that a Port should only deliver packets addressed to it (and broadcast packets) to its Router.
+  Note also that a Port should only deliver Datagrams addressed to it (and broadcast Datagrams) to its Router.
   
   This class does not extend Thread because it may have multiple threads according to the implementer's design.
   '''

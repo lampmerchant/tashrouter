@@ -65,65 +65,63 @@ class NameInformationService(Service):
       type_field = datagram.data[9 + object_field:9 + object_field + type_field]
       object_field = datagram.data[8:8 + object_field]
       
+      common_data = b''.join((struct.pack('>BHBBBB', nbp_id, req_network, req_node, req_socket, 0, len(object_field)),
+                              object_field,
+                              struct.pack('>B', len(type_field)),
+                              type_field,
+                              struct.pack('>B', len(zone_field)),
+                              zone_field))
+      lkup_data = struct.pack('>B', (self.NBP_CTRL_LKUP << 4) | 1) + common_data
+      fwdreq_data = struct.pack('>B', (self.NBP_CTRL_FWDREQ << 4) | 1) + common_data
+      
       if func == self.NBP_CTRL_BRRQ:
         
+        # if zone is *, try to sub in the zone name associated with the nonextended network whence the BrRq comes
         if zone_field == b'*':
           if rx_port.extended_network: continue  # BrRqs from extended networks must provide zone name
           if rx_port.network:
-            zones = list(router.zone_information_table.zones_in_network(rx_port.network))
-            if len(zones) == 1:
-              zone_field = zones[0]
-            elif len(zones) > 1:
-              continue  # this should be impossible
+            entry, _ = router.routing_table.get_by_network(rx_port.network)
+            if entry:
+              zones = list(router.zone_information_table.zones_in_network_range(entry.network_min))
+              if len(zones) == 1: zone_field = zones[0]  # there should not be more than one zone
         
-        entries = set(router.routing_table.get_by_network(network)
-                      for network in router.zone_information_table.networks_in_zone(zone_field))
-        entries.discard((None, None))
-        for entry, _ in entries:
-          if entry.distance == 0:
-            entry.port.multicast(zone_field, Datagram(hop_count=0,
-                                                      destination_network=0x0000,
-                                                      source_network=entry.port.network,
-                                                      destination_node=0xFF,
-                                                      source_node=entry.port.node,
-                                                      destination_socket=self.NBP_SAS,
-                                                      source_socket=self.NBP_SAS,
-                                                      ddp_type=self.NBP_DDP_TYPE,
-                                                      data=b''.join((struct.pack('>BBHBBBB',
-                                                                                 (self.NBP_CTRL_LKUP << 4) | 1,
-                                                                                 nbp_id,
-                                                                                 req_network,
-                                                                                 req_node,
-                                                                                 req_socket,
-                                                                                 0,
-                                                                                 len(object_field)),
-                                                                     object_field,
-                                                                     struct.pack('>B', len(type_field)),
-                                                                     type_field,
-                                                                     struct.pack('>B', len(zone_field)),
-                                                                     zone_field))))
-          else:
-            router.route(Datagram(hop_count=0,
-                                  destination_network=entry.network_min,
-                                  source_network=0,
-                                  destination_node=0x00,
-                                  source_node=0,
-                                  destination_socket=self.NBP_SAS,
-                                  source_socket=self.NBP_SAS,
-                                  ddp_type=self.NBP_DDP_TYPE,
-                                  data=b''.join((struct.pack('>BBHBBBB',
-                                                             (self.NBP_CTRL_FWDREQ << 4) | 1,
-                                                             nbp_id,
-                                                             req_network,
-                                                             req_node,
-                                                             req_socket,
-                                                             0,
-                                                             len(object_field)),
-                                                 object_field,
-                                                 struct.pack('>B', len(type_field)),
-                                                 type_field,
-                                                 struct.pack('>B', len(zone_field)),
-                                                 zone_field))))
+        # if zone is still *, just broadcast a LkUp on the requesting network and call it done
+        if zone_field == b'*':
+          rx_port.send(0x0000, 0xFF, Datagram(hop_count=0,
+                                              destination_network=0x0000,
+                                              source_network=rx_port.network,
+                                              destination_node=0xFF,
+                                              source_node=rx_port.node,
+                                              destination_socket=self.NBP_SAS,
+                                              source_socket=self.NBP_SAS,
+                                              ddp_type=self.NBP_DDP_TYPE,
+                                              data=lkup_data))
+        # we know the zone, so multicast LkUps to directly-connected networks and send FwdReqs to non-directly-connected ones
+        else:
+          entries = set(router.routing_table.get_by_network(network)
+                        for network in router.zone_information_table.networks_in_zone(zone_field))
+          entries.discard((None, None))
+          for entry, _ in entries:
+            if entry.distance == 0:
+              entry.port.multicast(zone_field, Datagram(hop_count=0,
+                                                        destination_network=0x0000,
+                                                        source_network=entry.port.network,
+                                                        destination_node=0xFF,
+                                                        source_node=entry.port.node,
+                                                        destination_socket=self.NBP_SAS,
+                                                        source_socket=self.NBP_SAS,
+                                                        ddp_type=self.NBP_DDP_TYPE,
+                                                        data=lkup_data))
+            else:
+              router.route(Datagram(hop_count=0,
+                                    destination_network=entry.network_min,
+                                    source_network=0,
+                                    destination_node=0x00,
+                                    source_node=0,
+                                    destination_socket=self.NBP_SAS,
+                                    source_socket=self.NBP_SAS,
+                                    ddp_type=self.NBP_DDP_TYPE,
+                                    data=fwdreq_data))
         
       elif func == self.NBP_CTRL_FWDREQ:
         
@@ -137,19 +135,7 @@ class NameInformationService(Service):
                                                   destination_socket=self.NBP_SAS,
                                                   source_socket=self.NBP_SAS,
                                                   ddp_type=self.NBP_DDP_TYPE,
-                                                  data=b''.join((struct.pack('>BBHBBBB',
-                                                                             (self.NBP_CTRL_LKUP << 4) | 1,
-                                                                             nbp_id,
-                                                                             req_network,
-                                                                             req_node,
-                                                                             req_socket,
-                                                                             0,
-                                                                             len(object_field)),
-                                                                 object_field,
-                                                                 struct.pack('>B', len(type_field)),
-                                                                 type_field,
-                                                                 struct.pack('>B', len(zone_field)),
-                                                                 zone_field))))
+                                                  data=lkup_data))
     
     self.stopped_event.set()
   

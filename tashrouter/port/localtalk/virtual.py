@@ -19,21 +19,21 @@ class VirtualLocalTalkPort(LocalTalkPort):
   __str__ = short_str
   __repr__ = short_str
   
-  def _recv_packet(self, packet_data):
-    log_localtalk_frame_inbound(packet_data, self)
-    self.inbound_packet(packet_data)
+  def _recv_frame(self, frame_data):
+    log_localtalk_frame_inbound(frame_data, self)
+    self.inbound_frame(frame_data)
   
   def start(self, router):
-    self._virtual_network.plug(self._recv_packet)
+    self._virtual_network.plug(self._recv_frame)
     super().start(router)
   
   def stop(self):
     super().stop()
-    self._virtual_network.unplug(self._recv_packet)
+    self._virtual_network.unplug(self._recv_frame)
   
-  def send_packet(self, packet_data):
-    log_localtalk_frame_outbound(packet_data, self)
-    self._virtual_network.send_packet(packet_data, self._recv_packet)
+  def send_frame(self, frame_data):
+    log_localtalk_frame_outbound(frame_data, self)
+    self._virtual_network.send_frame(frame_data, self._recv_frame)
 
 
 class VirtualLocalTalkNetwork:
@@ -49,10 +49,10 @@ class VirtualLocalTalkNetwork:
   def unplug(self, recv_func):
     with self._lock: self._plugged.remove(recv_func)
   
-  def send_packet(self, packet_data, recv_func):
+  def send_frame(self, frame_data, recv_func):
     function_calls = deque()
     with self._lock:
       for func in self._plugged:
         if func == recv_func: continue
-        function_calls.append((func, packet_data))
-    for func, packet_data in function_calls: func(packet_data)
+        function_calls.append((func, frame_data))
+    for func, frame_data in function_calls: func(frame_data)

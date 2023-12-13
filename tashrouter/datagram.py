@@ -30,22 +30,22 @@ class Datagram:
   data: bytes
   
   @classmethod
-  def from_long_header_bytes(cls, packet_bytes):
-    '''Construct a Datagram from the bytes of a long-header packet and raise ValueErrors if there are issues.'''
-    if len(packet_bytes) < 13: raise ValueError('packet too short, must be at least 13 bytes for long-header DDP datagram')
+  def from_long_header_bytes(cls, data):
+    '''Construct a Datagram object from bytes in the long-header format and raise ValueErrors if there are issues.'''
+    if len(data) < 13: raise ValueError('data too short, must be at least 13 bytes for long-header DDP datagram')
     (first, second, checksum, destination_network, source_network, destination_node, source_node, destination_socket, source_socket,
-     ddp_type) = struct.unpack('>BBHHHBBBBB', packet_bytes[:13])
-    if first & 0xC0: raise ValueError('invalid long-header packet, top two bits of first byte must be zeroes')
+     ddp_type) = struct.unpack('>BBHHHBBBBB', data[:13])
+    if first & 0xC0: raise ValueError('invalid long DDP header, top two bits of first byte must be zeroes')
     hop_count = (first & 0x3C) >> 2
     length = (first & 0x3) << 8 | second
     if length > 13 + cls.MAX_DATA_LENGTH:
-      raise ValueError('invalid long-header packet, length %d is greater than %d' % (length, cls.MAX_DATA_LENGTH))
-    if length != len(packet_bytes):
-      raise ValueError('invalid long-header packet, length field says %d but actual length is %d' % (length, len(packet_bytes)))
+      raise ValueError('invalid long DDP header, length %d is greater than %d' % (length, cls.MAX_DATA_LENGTH))
+    if length != len(data):
+      raise ValueError('invalid long DDP header, length field says %d but actual length is %d' % (length, len(data)))
     if checksum != 0:
-      calc_checksum = ddp_checksum(packet_bytes[4:])
+      calc_checksum = ddp_checksum(data[4:])
       if calc_checksum != checksum:
-        raise ValueError('invalid long-header packet, checksum is 0x%04X but should be 0x%04X' % (checksum, calc_checksum))
+        raise ValueError('invalid long DDP header, checksum is 0x%04X but should be 0x%04X' % (checksum, calc_checksum))
     return cls(hop_count=hop_count,
                destination_network=destination_network,
                source_network=source_network,
@@ -54,19 +54,19 @@ class Datagram:
                destination_socket=destination_socket,
                source_socket=source_socket,
                ddp_type=ddp_type,
-               data=packet_bytes[13:])
+               data=data[13:])
   
   @classmethod
-  def from_short_header_bytes(cls, destination_node, source_node, packet_bytes):
-    '''Construct a Datagram from the bytes of a short-header packet and raise ValueErrors if there are issues.'''
-    if len(packet_bytes) < 5: raise ValueError('packet too short, must be at least 5 bytes for short-header DDP datagram')
-    first, second, destination_socket, source_socket, ddp_type = struct.unpack('>BBBBB', packet_bytes[0:5])
-    if first & 0xFC: raise ValueError('invalid short-header packet, top six bits of first byte must be zeroes')
+  def from_short_header_bytes(cls, destination_node, source_node, data):
+    '''Construct a Datagram object from bytes in the short-header format and raise ValueErrors if there are issues.'''
+    if len(data) < 5: raise ValueError('data too short, must be at least 5 bytes for short-header DDP datagram')
+    first, second, destination_socket, source_socket, ddp_type = struct.unpack('>BBBBB', data[0:5])
+    if first & 0xFC: raise ValueError('invalid short DDP header, top six bits of first byte must be zeroes')
     length = (first & 0x3) << 8 | second
     if length > 5 + cls.MAX_DATA_LENGTH:
-      raise ValueError('invalid short-header packet, length %d is greater than %d' % (length, cls.MAX_DATA_LENGTH))
-    if length != len(packet_bytes):
-      raise ValueError('invalid short-header packet, length field says %d but actual length is %d' % (length, len(packet_bytes)))
+      raise ValueError('invalid short DDP header, length %d is greater than %d' % (length, cls.MAX_DATA_LENGTH))
+    if length != len(data):
+      raise ValueError('invalid short DDP header, length field says %d but actual length is %d' % (length, len(data)))
     return cls(hop_count=0,
                destination_network=0,
                source_network=0,
@@ -75,25 +75,22 @@ class Datagram:
                destination_socket=destination_socket,
                source_socket=source_socket,
                ddp_type=ddp_type,
-               data=packet_bytes[5:])
+               data=data[5:])
   
   @classmethod
-  def from_llap_packet_bytes(cls, packet_bytes):
-    '''Construct a Datagram from the bytes of a packet from an LLAP network and raise ValueErrors if there are issues.
-    
-    Note that a "packet" from an LLAP network includes the destination, source, and type bytes but not the FCS/CRC bytes.
-    '''
-    if len(packet_bytes) < 8: raise ValueError('LLAP packet too short, must be at least 8 bytes for short header DDP datagram')
-    destination_node, source_node, llap_type = struct.unpack('>BBB', packet_bytes[0:3])
+  def from_llap_frame_bytes(cls, frame_bytes):
+    '''Construct a Datagram from the bytes of a frame from an LLAP network and raise ValueErrors if there are issues.'''
+    if len(frame_bytes) < 8: raise ValueError('LLAP frame too short, must be at least 8 bytes for short header DDP datagram')
+    destination_node, source_node, llap_type = struct.unpack('>BBB', frame_bytes[0:3])
     if llap_type == 1:  # short header
-      return cls.from_short_header_bytes(destination_node, source_node, packet_bytes[3:])
+      return cls.from_short_header_bytes(destination_node, source_node, frame_bytes[3:])
     elif llap_type == 2:  # long header
-      return cls.from_long_header_bytes(packet_bytes[3:])
+      return cls.from_long_header_bytes(frame_bytes[3:])
     else:
       raise ValueError('invalid LLAP type for DDP datagram, must be 1 or 2')
   
   def _check_ranges(self):
-    '''Check that the packet's parameters are in range, raise ValueError if not.'''
+    '''Check that the Datagram's parameters are in range, raise ValueError if not.'''
     for name, min_value, max_value in (('hop count', 0, 15),
                                        ('destination network', 0, 65534),
                                        ('source network', 0, 65534),
@@ -135,7 +132,7 @@ class Datagram:
   def as_short_header_bytes(self):
     '''Return this Datagram in short-header format as bytes and raise ValueErrors if there are issues.'''
     if self.hop_count > 0:
-      raise ValueError('invalid hop count %d, short-header packets may not have non-zero hop count' % self.hop_count)
+      raise ValueError('invalid hop count %d, short-header datagrams may not have non-zero hop count' % self.hop_count)
     self._check_ranges()
     if len(self.data) > self.MAX_DATA_LENGTH:
       raise ValueError('data length %d is greater than max length %d' % (len(self.data), self.MAX_DATA_LENGTH))

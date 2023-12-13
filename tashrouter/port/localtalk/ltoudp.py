@@ -59,9 +59,9 @@ class LtoudpPort(LocalTalkPort):
     self._stop_requested = True
     self._stopped_event.wait()
   
-  def send_packet(self, packet_data):
-    log_localtalk_frame_outbound(packet_data, self)
-    self._socket.sendto(self._sender_id + packet_data, (self.LTOUDP_GROUP, self.LTOUDP_PORT))
+  def send_frame(self, frame_data):
+    log_localtalk_frame_outbound(frame_data, self)
+    self._socket.sendto(self._sender_id + frame_data, (self.LTOUDP_GROUP, self.LTOUDP_PORT))
   
   def _run(self):
     self._started_event.set()
@@ -72,5 +72,5 @@ class LtoudpPort(LocalTalkPort):
       if len(data) < 7: continue
       if data[0:4] == self._sender_id: continue  #TODO check sender_addr too
       log_localtalk_frame_inbound(data[4:], self)
-      self.inbound_packet(data[4:])
+      self.inbound_frame(data[4:])
     self._stopped_event.set()

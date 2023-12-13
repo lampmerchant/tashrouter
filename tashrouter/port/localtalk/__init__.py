@@ -99,27 +99,27 @@ class LocalTalkPort(Port):
     self._node_stop_event.set()
     self._node_stopped_event.wait()
   
-  def inbound_packet(self, packet_data):
-    # data packet
-    if not packet_data[2] & 0x80 and len(packet_data) >= 8:
-      datagram = Datagram.from_llap_packet_bytes(packet_data)
+  def inbound_frame(self, frame_data):
+    # data frame
+    if not frame_data[2] & 0x80 and len(frame_data) >= 8:
+      datagram = Datagram.from_llap_frame_bytes(frame_data)
       log_datagram_inbound(self.network, self.node, datagram, self)
       self._router.inbound(datagram, self)
     # we've settled on a node address and someone else is asking if they can use it, we say no
-    elif packet_data[2] == self.LLAP_ENQ and self._respond_to_enq and self.node and self.node == packet_data[0]:
-      self.send_packet(bytes((self.node, self.node, self.LLAP_ACK)))
+    elif frame_data[2] == self.LLAP_ENQ and self._respond_to_enq and self.node and self.node == frame_data[0]:
+      self.send_frame(bytes((self.node, self.node, self.LLAP_ACK)))
     else:
       with self._node_lock:
         # someone else has responded that they're on the node address that we want
-        if packet_data[2] in (self.LLAP_ENQ, self.LLAP_ACK) and not self.node and self._desired_node == packet_data[0]:
+        if frame_data[2] in (self.LLAP_ENQ, self.LLAP_ACK) and not self.node and self._desired_node == frame_data[0]:
           self._desired_node_attempts = 0
           self._desired_node = self._desired_node_list.pop()
           if not self._desired_node_list:
             self._desired_node_list = list(range(1, 0xFE + 1))
             random.shuffle(self._desired_node_list)
   
-  def send_packet(self, packet_data):
-    raise NotImplementedError('subclass must override "send_packet" method')
+  def send_frame(self, frame_data):
+    raise NotImplementedError('subclass must override "send_frame" method')
   
   def set_node_id(self, node):
     # subclass may override and call to this
@@ -130,14 +130,14 @@ class LocalTalkPort(Port):
     if self.node == 0: return
     log_datagram_outbound(network, node, datagram, self)
     if datagram.destination_network == datagram.source_network and datagram.destination_network in (0, self.network):
-      self.send_packet(bytes((node, self.node, 1)) + datagram.as_short_header_bytes())
+      self.send_frame(bytes((node, self.node, 1)) + datagram.as_short_header_bytes())
     else:
-      self.send_packet(bytes((node, self.node, 2)) + datagram.as_long_header_bytes())
+      self.send_frame(bytes((node, self.node, 2)) + datagram.as_long_header_bytes())
   
   def multicast(self, zone_name, datagram):
     if self.node == 0: return
     log_datagram_multicast(zone_name, datagram, self)
-    self.send_packet(bytes((0xFF, self.node, 1)) + datagram.as_short_header_bytes())
+    self.send_frame(bytes((0xFF, self.node, 1)) + datagram.as_short_header_bytes())
   
   def _set_network_range(self, network_min, network_max):
     logging.info('%s assigned network number %d', str(self), network_min)
@@ -168,5 +168,5 @@ class LocalTalkPort(Port):
         else:
           send_enq = self._desired_node
           self._desired_node_attempts += 1
-      if send_enq: self.send_packet(bytes((send_enq, send_enq, self.LLAP_ENQ)))
+      if send_enq: self.send_frame(bytes((send_enq, send_enq, self.LLAP_ENQ)))
     self._node_stopped_event.set()

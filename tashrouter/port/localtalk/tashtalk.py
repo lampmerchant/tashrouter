@@ -55,11 +55,11 @@ class TashTalkPort(LocalTalkPort):
     self._reader_stopped_event.wait()
     self._writer_stopped_event.wait()
   
-  def send_packet(self, packet_data):
+  def send_frame(self, frame_data):
     fcs = FcsCalculator()
-    fcs.feed(packet_data)
-    log_localtalk_frame_outbound(packet_data, self)
-    self._writer_queue.put(b''.join((b'\x01', packet_data, bytes((fcs.byte1(), fcs.byte2())))))
+    fcs.feed(frame_data)
+    log_localtalk_frame_outbound(frame_data, self)
+    self._writer_queue.put(b''.join((b'\x01', frame_data, bytes((fcs.byte1(), fcs.byte2())))))
   
   def set_node_id(self, node):
     self._writer_queue.put(self.set_node_address_cmd(node))
@@ -93,7 +93,7 @@ class TashTalkPort(LocalTalkPort):
             if byte == 0xFD and fcs.is_okay() and buf_ptr >= 5:
               data = bytes(buf[:buf_ptr - 2])
               log_localtalk_frame_inbound(data, self)
-              self.inbound_packet(data)
+              self.inbound_frame(data)
             fcs.reset()
             buf_ptr = 0
             continue
