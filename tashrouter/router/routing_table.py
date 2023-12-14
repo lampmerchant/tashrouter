@@ -98,10 +98,13 @@ class RoutingTable:
     with self._lock:
       for entry in set(self._entry_by_network.values()):
         if self._state_by_entry[entry] == self.STATE_WORST:
+          logging.debug('%s aging out: %s', str(self._router), str(entry))
           entries_to_delete.add(entry)
           self._state_by_entry.pop(entry)
-          self._router.zone_information_table.remove_networks(entry.network_min, entry.network_max)
-          logging.debug('%s aging out: %s', str(self._router), str(entry))
+          try:
+            self._router.zone_information_table.remove_networks(entry.network_min, entry.network_max)
+          except ValueError as e:
+            logging.warning("%s couldn't remove networks from zone information table: %s", str(self._router), e.args[0])
         elif self._state_by_entry[entry] == self.STATE_BAD:
           self._state_by_entry[entry] = self.STATE_WORST
         elif self._state_by_entry[entry] == self.STATE_SUS:
@@ -129,7 +132,10 @@ class RoutingTable:
       for entry in entries_to_delete:
         logging.debug('%s deleting: %s', str(self._router), str(entry))
         self._state_by_entry.pop(entry)
-        self._router.zone_information_table.remove_networks(entry.network_min, entry.network_max)
+        try:
+          self._router.zone_information_table.remove_networks(entry.network_min, entry.network_max)
+        except ValueError as e:
+          logging.warning("%s couldn't remove networks from zone information table: %s", str(self._router), e.args[0])
       for network in networks_to_delete: self._entry_by_network.pop(network)
       entry = RoutingTableEntry(extended_network=port.extended_network,
                                 network_min=network_min,

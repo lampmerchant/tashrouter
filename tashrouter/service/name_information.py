@@ -82,8 +82,12 @@ class NameInformationService(Service):
           if rx_port.network:
             entry, _ = router.routing_table.get_by_network(rx_port.network)
             if entry:
-              zones = list(router.zone_information_table.zones_in_network_range(entry.network_min))
-              if len(zones) == 1: zone_field = zones[0]  # there should not be more than one zone
+              try:
+                zones = list(router.zone_information_table.zones_in_network_range(entry.network_min))
+              except ValueError:
+                pass
+              else:
+                if len(zones) == 1: zone_field = zones[0]  # there should not be more than one zone
         
         # if zone is still *, just broadcast a LkUp on the requesting network and call it done
         if zone_field == b'*':

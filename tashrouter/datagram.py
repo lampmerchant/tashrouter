@@ -77,18 +77,6 @@ class Datagram:
                ddp_type=ddp_type,
                data=data[5:])
   
-  @classmethod
-  def from_llap_frame_bytes(cls, frame_bytes):
-    '''Construct a Datagram from the bytes of a frame from an LLAP network and raise ValueErrors if there are issues.'''
-    if len(frame_bytes) < 8: raise ValueError('LLAP frame too short, must be at least 8 bytes for short header DDP datagram')
-    destination_node, source_node, llap_type = struct.unpack('>BBB', frame_bytes[0:3])
-    if llap_type == 1:  # short header
-      return cls.from_short_header_bytes(destination_node, source_node, frame_bytes[3:])
-    elif llap_type == 2:  # long header
-      return cls.from_long_header_bytes(frame_bytes[3:])
-    else:
-      raise ValueError('invalid LLAP type for DDP datagram, must be 1 or 2')
-  
   def _check_ranges(self):
     '''Check that the Datagram's parameters are in range, raise ValueError if not.'''
     for name, min_value, max_value in (('hop count', 0, 15),

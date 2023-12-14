@@ -2,6 +2,7 @@
 
 import logging
 import random
+import struct
 from threading import Thread, Event, Lock
 
 from .. import Port
@@ -67,6 +68,8 @@ class LocalTalkPort(Port):
   ENQ_INTERVAL = 0.25  # seconds
   ENQ_ATTEMPTS = 8
   
+  LLAP_APPLETALK_SHORT_HEADER = 0x01
+  LLAP_APPLETALK_LONG_HEADER = 0x02
   LLAP_ENQ = 0x81
   LLAP_ACK = 0x82
   
@@ -100,18 +103,33 @@ class LocalTalkPort(Port):
     self._node_stopped_event.wait()
   
   def inbound_frame(self, frame_data):
-    # data frame
-    if not frame_data[2] & 0x80 and len(frame_data) >= 8:
-      datagram = Datagram.from_llap_frame_bytes(frame_data)
-      log_datagram_inbound(self.network, self.node, datagram, self)
-      self._router.inbound(datagram, self)
+    if len(frame_data) < 3: return  # invalid frame, too short
+    destination_node, source_node, llap_type = struct.unpack('>BBB', frame_data[0:3])
+    # short-header data frame
+    if llap_type == self.LLAP_APPLETALK_SHORT_HEADER:
+      try:
+        datagram = Datagram.from_short_header_bytes(destination_node, source_node, frame_data[3:])
+      except ValueError as e:
+        logging.debug('%s failed to parse short-header AppleTalk datagram from LocalTalk frame: %s', str(self), e.args[0])
+      else:
+        log_datagram_inbound(self.network, self.node, datagram, self)
+        self._router.inbound(datagram, self)
+    # long-header data frame
+    elif llap_type == self.LLAP_APPLETALK_LONG_HEADER:
+      try:
+        datagram = Datagram.from_long_header_bytes(frame_data[3:])
+      except ValueError as e:
+        logging.debug('%s failed to parse long-header AppleTalk datagram from LocalTalk frame: %s', str(self), e.args[0])
+      else:
+        log_datagram_inbound(self.network, self.node, datagram, self)
+        self._router.inbound(datagram, self)
     # we've settled on a node address and someone else is asking if they can use it, we say no
-    elif frame_data[2] == self.LLAP_ENQ and self._respond_to_enq and self.node and self.node == frame_data[0]:
+    elif llap_type == self.LLAP_ENQ and self._respond_to_enq and self.node and self.node == destination_node:
       self.send_frame(bytes((self.node, self.node, self.LLAP_ACK)))
     else:
       with self._node_lock:
         # someone else has responded that they're on the node address that we want
-        if frame_data[2] in (self.LLAP_ENQ, self.LLAP_ACK) and not self.node and self._desired_node == frame_data[0]:
+        if llap_type in (self.LLAP_ENQ, self.LLAP_ACK) and not self.node and self._desired_node == destination_node:
           self._desired_node_attempts = 0
           self._desired_node = self._desired_node_list.pop()
           if not self._desired_node_list:
@@ -139,15 +157,15 @@ class LocalTalkPort(Port):
     log_datagram_multicast(zone_name, datagram, self)
     self.send_frame(bytes((0xFF, self.node, 1)) + datagram.as_short_header_bytes())
   
-  def _set_network_range(self, network_min, network_max):
-    logging.info('%s assigned network number %d', str(self), network_min)
-    self.network = self.network_min = self.network_max = network_min
+  def _set_network(self, network):
+    logging.info('%s assigned network number %d', str(self), network)
+    self.network = self.network_min = self.network_max = network
     self._router.routing_table.set_port_range(self, self.network, self.network)
   
   def set_network_range(self, network_min, network_max):
     if network_min != network_max: raise ValueError('LocalTalk networks are nonextended and cannot be set to a range of networks')
     if self.network: raise ValueError('%s assigned network number %d but already has %d' % (str(self), network_min, self.network))
-    self._set_network_range(network_min, network_max)
+    self._set_network(network_min)
   
   @staticmethod
   def multicast_address(_):
@@ -155,7 +173,7 @@ class LocalTalkPort(Port):
   
   def _node_run(self):
     if self.network:
-      self._set_network_range(self.network, self.network)
+      self._set_network(self.network)
       self._router.zone_information_table.add_networks_to_zone(self._seed_zone_name, self.network, self.network)
     self._node_started_event.set()
     while not self._node_stop_event.wait(self.ENQ_INTERVAL):

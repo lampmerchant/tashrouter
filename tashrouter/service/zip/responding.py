@@ -2,6 +2,7 @@
 
 from collections import deque
 from itertools import chain
+import logging
 from queue import Queue
 import struct
 from threading import Thread, Event
@@ -40,12 +41,12 @@ class ZipRespondingService(Service, ZipService):
     
     networks_and_zone_names = deque()
     while len(data) >= 3:
-      network, zone_name_length = struct.unpack('>HB', data[:3])
+      network_min, zone_name_length = struct.unpack('>HB', data[:3])
       zone_name = data[3:3 + zone_name_length]
       if len(zone_name) != zone_name_length: break
       data = data[3 + zone_name_length:]
       if zone_name_length == 0: continue
-      networks_and_zone_names.append((network, zone_name))
+      networks_and_zone_names.append((network_min, zone_name))
     if not networks_and_zone_names: return
     
     network_min_to_network_max = {}
@@ -54,7 +55,16 @@ class ZipRespondingService(Service, ZipService):
     
     if func == self.ZIP_FUNC_REPLY:
       for network_min, zone_name in networks_and_zone_names:
-        router.zone_information_table.add_networks_to_zone(zone_name, network_min, network_min_to_network_max[network_min])
+        try:
+          network_max = network_min_to_network_max[network_min]
+        except KeyError:
+          logging.warning('%s ZIP reply refers to a network range (starting with %d) with which we are not familiar', str(router), 
+                          network_min)
+        else:
+          try:
+            router.zone_information_table.add_networks_to_zone(zone_name, network_min, network_max)
+          except ValueError as e:
+            logging.warning("%s ZIP reply couldn't be added to zone information table: %s", str(router), e.args[0])
     elif func == self.ZIP_FUNC_EXT_REPLY:
       #TODO this code is fragile and I do not like it
       network_min = None
@@ -63,7 +73,16 @@ class ZipRespondingService(Service, ZipService):
         self._pending_network_zone_name_set[network_min].add(zone_name)
       if network_min is not None and len(self._pending_network_zone_name_set.get(network_min, ())) >= count and count >= 1:
         for zone_name in self._pending_network_zone_name_set.pop(network_min):
-          router.zone_information_table.add_networks_to_zone(zone_name, network_min, network_min_to_network_max[network_min])
+          try:
+            network_max = network_min_to_network_max[network_min]
+          except KeyError:
+            logging.warning('%s ZIP reply refers to a network range (starting with %d) with which we are not familiar', str(router),
+                            network_min)
+          else:
+            try:
+              router.zone_information_table.add_networks_to_zone(zone_name, network_min, network_max)
+            except ValueError as e:
+              logging.warning("%s ZIP reply couldn't be added to zone information table: %s", str(router), e.args[0])
   
   @classmethod
   def _query(cls, router, datagram, rx_port):
@@ -106,7 +125,12 @@ class ZipRespondingService(Service, ZipService):
     default_zone_name = None
     number_of_zones = 0
     multicast_address = b''
-    for zone_name in router.zone_information_table.zones_in_network_range(rx_port.network_min, rx_port.network_max):
+    try:
+      zone_names = router.zone_information_table.zones_in_network_range(rx_port.network_min, rx_port.network_max)
+    except ValueError as e:
+      logging.warning("%s couldn't get zone names in port network range for GetNetInfo: %s", router, e.args[0])
+      return
+    for zone_name in zone_names:
       number_of_zones += 1
       if default_zone_name is None:
         # zones_in_network_range returns the default zone first
@@ -135,7 +159,10 @@ class ZipRespondingService(Service, ZipService):
     if start_index != 0: return
     entry, _ = router.routing_table.get_by_network(datagram.source_network)
     if entry is None: return
-    zone_name = next(router.zone_information_table.zones_in_network_range(entry.network_min), None)
+    try:
+      zone_name = next(router.zone_information_table.zones_in_network_range(entry.network_min), None)
+    except ValueError:
+      return
     if not zone_name: return
     router.reply(datagram, rx_port, cls.ATP_DDP_TYPE, struct.pack('>BBHBBHB',
                                                                   cls.ATP_FUNC_TRESP | cls.ATP_EOM,
@@ -149,8 +176,14 @@ class ZipRespondingService(Service, ZipService):
   @classmethod
   def _get_zone_list(cls, router, datagram, rx_port, local=False):
     _, _, tid, _, _, start_index = struct.unpack('>BBHBBH', datagram.data)
-    zone_iter = (router.zone_information_table.zones_in_network_range(rx_port.network_min, rx_port.network_max) if local
-                 else iter(router.zone_information_table.zones()))
+    if local:
+      try:
+        zone_iter = router.zone_information_table.zones_in_network_range(rx_port.network_min, rx_port.network_max)
+      except ValueError as e:
+        logging.warning("%s couldn't get zone names in port network range for GetLocalZones: %s", router, e.args[0])
+        return
+    else:
+      zone_iter = iter(router.zone_information_table.zones())
     for _ in range(start_index - 1): next(zone_iter, None)  # skip over start_index-1 entries (index is 1-relative)
     last_flag = 0
     zone_list = deque()

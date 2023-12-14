@@ -249,14 +249,14 @@ class EtherTalkPort(Port):
       
       try:
         datagram = Datagram.from_long_header_bytes(frame_data[22:14 + length])
-      except ValueError:
-        return
-      
-      if datagram.hop_count == 0: self._add_address_mapping(datagram.source_network, datagram.source_node, frame_data[6:12])
-      if (frame_data.startswith((self._hw_addr, self.ELAP_BROADCAST_ADDR)) or
-          (frame_data.startswith(self.ELAP_MULTICAST_PREFIX) and frame_data[5] <= self.ELAP_MULTICAST_ADDR_MAX)):
-        log_datagram_inbound(self.network, self.node, datagram, self)
-        self._router.inbound(datagram, self)
+      except ValueError as e:
+        logging.debug('%s failed to parse AppleTalk datagram from EtherTalk frame: %s', str(self), e.args[0])
+      else:
+        if datagram.hop_count == 0: self._add_address_mapping(datagram.source_network, datagram.source_node, frame_data[6:12])
+        if (frame_data.startswith((self._hw_addr, self.ELAP_BROADCAST_ADDR)) or
+            (frame_data.startswith(self.ELAP_MULTICAST_PREFIX) and frame_data[5] <= self.ELAP_MULTICAST_ADDR_MAX)):
+          log_datagram_inbound(self.network, self.node, datagram, self)
+          self._router.inbound(datagram, self)
   
   def send_frame(self, frame_data):
     '''Implemented by subclass to send Ethernet frames.'''
@@ -318,6 +318,7 @@ class EtherTalkPort(Port):
     self._send_datagram(self.multicast_address(zone_name), datagram)
   
   def _set_network_range(self, network_min, network_max):
+    logging.info('%s assigned network number range %d-%d', str(self), network_min, network_max)
     self.network_min = network_min
     self.network_max = network_max
     self._router.routing_table.set_port_range(self, self.network_min, self.network_max)
@@ -333,7 +334,6 @@ class EtherTalkPort(Port):
     if self.network_min or self.network_max:
       raise ValueError('%s assigned network number range %d-%d but already has %d-%d' % (str(self), network_min, network_max,
                                                                                          self.network_min, self.network_max))
-    logging.info('%s assigned network number range %d-%d', str(self), network_min, network_max)
     self._set_network_range(network_min, network_max)
   
   @classmethod
