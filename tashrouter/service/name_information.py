@@ -83,7 +83,7 @@ class NameInformationService(Service):
             entry, _ = router.routing_table.get_by_network(rx_port.network)
             if entry:
               try:
-                zones = list(router.zone_information_table.zones_in_network_range(entry.network_min))
+                zones = router.zone_information_table.zones_in_network_range(entry.network_min)
               except ValueError:
                 pass
               else:

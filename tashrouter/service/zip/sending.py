@@ -43,7 +43,7 @@ class ZipSendingService(Service, ZipService):
       queries = {}  # (port, network, node) -> network_mins
       for entry in router.routing_table:
         try:
-          if next(router.zone_information_table.zones_in_network_range(entry.network_min, entry.network_max), None): continue
+          if next(iter(router.zone_information_table.zones_in_network_range(entry.network_min, entry.network_max)), None): continue
         except ValueError as e:
           logging.warning('%s apparent disjoin between routing table and zone information table: %s', router, e.args[0])
           continue

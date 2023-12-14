@@ -106,21 +106,21 @@ class ZoneInformationTable:
       return list(self._zone_name_to_network_min_set.keys())
   
   def zones_in_network_range(self, network_min, network_max=None):
-    '''Yield the names of all zones in the given range of networks, default zone name first.'''
+    '''Return a deque containing the names of all zones in the given range of networks, default zone name first.'''
     if network_max and network_max < network_min: raise ValueError('range %d-%d is backwards' % (network_min, network_max))
     with self._lock:
-      if not self._check_range(network_min, network_max): return
+      if not self._check_range(network_min, network_max): return deque()
       default_zone_name = self._network_min_to_default_zone_name[network_min]
       retval = deque(zone_name for zone_name in self._network_min_to_zone_name_set[network_min] if zone_name != default_zone_name)
       retval.appendleft(default_zone_name)
-    yield from retval
+    return retval
   
   def networks_in_zone(self, zone_name):
-    '''Yield the network numbers of all networks in the given zone.'''
+    '''Return a deque containing the network numbers of all networks in the given zone.'''
     with self._lock:
       zone_name = self._ucased_zone_name_to_zone_name.get(ucase(zone_name))
-      if zone_name is None: return
+      if zone_name is None: return deque()
       retval = deque()
       for network_min in self._zone_name_to_network_min_set[zone_name]:
         retval.extend(range(network_min, self._network_min_to_network_max[network_min] + 1))
-    yield from retval
+    return retval

@@ -98,7 +98,7 @@ class ZipRespondingService(Service, ZipService):
       entry, _ = router.routing_table.get_by_network(requested_network)
       if entry is None: continue
       try:
-        zone_names = deque(router.zone_information_table.zones_in_network_range(entry.network_min))
+        zone_names = router.zone_information_table.zones_in_network_range(entry.network_min)
       except ValueError:
         continue
       datagram_data = deque()
@@ -160,7 +160,7 @@ class ZipRespondingService(Service, ZipService):
     entry, _ = router.routing_table.get_by_network(datagram.source_network)
     if entry is None: return
     try:
-      zone_name = next(router.zone_information_table.zones_in_network_range(entry.network_min), None)
+      zone_name = next(iter(router.zone_information_table.zones_in_network_range(entry.network_min)), None)
     except ValueError:
       return
     if not zone_name: return
@@ -178,7 +178,7 @@ class ZipRespondingService(Service, ZipService):
     _, _, tid, _, _, start_index = struct.unpack('>BBHBBH', datagram.data)
     if local:
       try:
-        zone_iter = router.zone_information_table.zones_in_network_range(rx_port.network_min, rx_port.network_max)
+        zone_iter = iter(router.zone_information_table.zones_in_network_range(rx_port.network_min, rx_port.network_max))
       except ValueError as e:
         logging.warning("%s couldn't get zone names in port network range for GetLocalZones: %s", router, e.args[0])
         return
