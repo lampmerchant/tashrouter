@@ -57,5 +57,6 @@ class RtmpSendingService(Service, RtmpService):
     pass
   
   def force_send(self):
+    '''Force this service to immediately send an RTMP Datagram for testing purposes.'''
     self.queue.put(self.force_send_flag)
     self.queue.join()

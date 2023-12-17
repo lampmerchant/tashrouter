@@ -4,7 +4,7 @@ import struct
 
 
 def datagram_header(datagram):
-  '''Return a string that contains a datagram's header information.'''
+  '''Return a string that contains a Datagram's header information.'''
   return '%2d %d.%-3d %d.%-3d %3d %3d %d' % (datagram.hop_count,
                                              datagram.destination_network,
                                              datagram.destination_node,
@@ -16,13 +16,13 @@ def datagram_header(datagram):
 
 
 def ethernet_frame_header(frame_data):
-  '''Return a string that contains an ethernet frame's header information.'''
+  '''Return a string that contains an Ethernet frame's header information.'''
   if len(frame_data) < 12: return ''
   return ' '.join((''.join(('%02X' % i) for i in frame_data[0:6]), ''.join(('%02X' % i) for i in frame_data[6:12])))
 
 
 def localtalk_frame_header(frame_data):
-  '''Return a string that contains an ethernet frame's header information.'''
+  '''Return a string that contains a LocalTalk frame's header information.'''
   if len(frame_data) < 3: return ''
   return '%3d %3d  type %02X' % struct.unpack('>BBB', frame_data[0:3])
 
@@ -47,38 +47,46 @@ class NetLogger:
                                  str(data))))
   
   def log_datagram_inbound(self, network, node, datagram, port):
+    '''Log an inbound DDP Datagram.'''
     if not self._logging_on: return
     self._log_str('in to %d.%d' % (network, node), port.short_str(), datagram_header(datagram), datagram.data)
   
   def log_datagram_outbound(self, network, node, datagram, port):
+    '''Log an outbound DDP Datagram.'''
     if not self._logging_on: return
     self._log_str('out to %d.%d' % (network, node), port.short_str(), datagram_header(datagram), datagram.data)
   
   def log_datagram_multicast(self, zone_name, datagram, port):
+    '''Log a multicast DDP Datagram.'''
     if not self._logging_on: return
     zone_name = zone_name.decode('mac_roman', 'replace')
     self._log_str('out to %s' % zone_name, port.short_str(), datagram_header(datagram), datagram.data)
   
   def log_ethernet_frame_inbound(self, frame_data, port):
+    '''Log an inbound Ethernet frame.'''
     if not self._logging_on: return
     if len(frame_data) < 14: return
     length = struct.unpack('>H', frame_data[12:14])[0]
     self._log_str('frame in', port.short_str(), ethernet_frame_header(frame_data), frame_data[14:14 + length])
   
   def log_ethernet_frame_outbound(self, frame_data, port):
+    '''Log an outbound Ethernet frame.'''
     if not self._logging_on: return
     if len(frame_data) < 14: return
     length = struct.unpack('>H', frame_data[12:14])[0]
     self._log_str('frame out', port.short_str(), ethernet_frame_header(frame_data), frame_data[14:14 + length])
   
   def log_localtalk_frame_inbound(self, frame_data, port):
+    '''Log an inbound LocalTalk frame.'''
     if not self._logging_on: return
     self._log_str('frame in', port.short_str(), localtalk_frame_header(frame_data), frame_data[3:])
   
   def log_localtalk_frame_outbound(self, frame_data, port):
+    '''Log an outbound LocalTalk frame.'''
     if not self._logging_on: return
     self._log_str('frame out', port.short_str(), localtalk_frame_header(frame_data), frame_data[3:])
   
   def set_log_str_func(self, func):
+    '''Activate network traffic logging and set the function called with logging strings (such as logging.debug).'''
     self._logging_on = True
     self._log_str_func = func

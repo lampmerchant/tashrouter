@@ -1,10 +1,12 @@
 '''Port that connects to LToUDP.'''
 
+import errno
 import os
 import select
 import socket
 import struct
 from threading import Thread, Event
+import time
 
 from . import LocalTalkPort
 from ...netlog import log_localtalk_frame_inbound, log_localtalk_frame_outbound
@@ -19,6 +21,8 @@ class LtoudpPort(LocalTalkPort):
   DEFAULT_INTF_ADDRESS = '0.0.0.0'
   
   SELECT_TIMEOUT = 0.25  # seconds
+  NETWORK_UP_RETRY_TIMEOUT = 1  # seconds
+  NETWORK_UP_RETRY_COUNT = 10
   
   def __init__(self, intf_address=DEFAULT_INTF_ADDRESS, seed_network=0, seed_zone_name=None):
     super().__init__(seed_network=seed_network, seed_zone_name=seed_zone_name, respond_to_enq=True)
@@ -46,9 +50,15 @@ class LtoudpPort(LocalTalkPort):
     self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
     self._socket.bind((self.LTOUDP_GROUP, self.LTOUDP_PORT))
     self._socket.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 1)
-    #TODO next line crashes out with "OSError: [Errno 19] No such device" if network is not up
-    self._socket.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP,
-                           socket.inet_aton(self.LTOUDP_GROUP) + socket.inet_aton(self._intf_address))
+    for attempt in range(self.NETWORK_UP_RETRY_COUNT):
+      try:
+        # this raises "OSError: [Errno 19] No such device" if network is not up, so build in some retry logic
+        self._socket.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP,
+                                socket.inet_aton(self.LTOUDP_GROUP) + socket.inet_aton(self._intf_address))
+        break
+      except OSError as e:
+        if e.errno != errno.ENODEV or attempt + 1 == self.NETWORK_UP_RETRY_COUNT: raise
+        time.sleep(self.NETWORK_UP_RETRY_TIMEOUT)
     self._sender_id = struct.pack('>L', os.getpid())
     self._thread = Thread(target=self._run)
     self._thread.start()

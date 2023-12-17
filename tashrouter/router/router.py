@@ -35,7 +35,10 @@ class Router:
       if sas is not None: self._services_by_sas[sas] = service
     self.routing_table = RoutingTable(self)
   
-  def short_str(self): return self._short_str
+  def short_str(self):
+    '''Return a short string representation of this Router.'''
+    return self._short_str
+  
   __str__ = short_str
   __repr__ = short_str
   

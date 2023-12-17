@@ -38,17 +38,20 @@ class VirtualEtherTalkNetwork:
     self._lock = Lock()
   
   def plug(self, hw_addr, recv_func):
+    '''Plug a VirtualEtherTalkPort into this network.'''
     with self._lock: self._plugged[hw_addr] = recv_func
   
   def unplug(self, hw_addr):
+    '''Unplug a VirtualEtherTalkPort from this network.'''
     with self._lock: self._plugged.pop(hw_addr)
   
   def send_frame(self, frame_data, recv_hw_addr):
+    '''Send an Ethernet frame to all ports plugged into this network.'''
     if not frame_data: return
     is_multicast = True if frame_data[0] & 0x01 else False
-    function_calls = deque()
+    functions_to_call = deque()
     with self._lock:
       for hw_addr, func in self._plugged.items():
         if hw_addr == recv_hw_addr: continue
-        if is_multicast or frame_data[0:6] == hw_addr: function_calls.append((func, frame_data))
-    for func, frame_data in function_calls: func(frame_data)
+        if is_multicast or frame_data[0:6] == hw_addr: functions_to_call.append(func)
+    for func in functions_to_call: func(frame_data)

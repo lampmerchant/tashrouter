@@ -44,15 +44,18 @@ class VirtualLocalTalkNetwork:
     self._lock = Lock()
   
   def plug(self, recv_func):
+    '''Plug a VirtualLocalTalkPort into this network.'''
     with self._lock: self._plugged.append(recv_func)
   
   def unplug(self, recv_func):
+    '''Unplug a VirtualLocalTalkPort from this network.'''
     with self._lock: self._plugged.remove(recv_func)
   
   def send_frame(self, frame_data, recv_func):
-    function_calls = deque()
+    '''Send a LocalTalk frame to all ports plugged into this network.'''
+    functions_to_call = deque()
     with self._lock:
       for func in self._plugged:
         if func == recv_func: continue
-        function_calls.append((func, frame_data))
-    for func, frame_data in function_calls: func(frame_data)
+        functions_to_call.append(func)
+    for func in functions_to_call: func(frame_data)

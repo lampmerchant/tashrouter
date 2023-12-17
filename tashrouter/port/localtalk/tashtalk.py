@@ -61,18 +61,18 @@ class TashTalkPort(LocalTalkPort):
     log_localtalk_frame_outbound(frame_data, self)
     self._writer_queue.put(b''.join((b'\x01', frame_data, bytes((fcs.byte1(), fcs.byte2())))))
   
-  def set_node_id(self, node):
-    self._writer_queue.put(self.set_node_address_cmd(node))
-    super().set_node_id(node)
-  
   @staticmethod
-  def set_node_address_cmd(desired_node_address):
+  def _set_node_address_cmd(desired_node_address):
     if not 1 <= desired_node_address <= 254: raise ValueError('node address %d not between 1 and 254' % desired_node_address)
     retval = bytearray(33)
     retval[0] = 0x02
     byte, bit = divmod(desired_node_address, 8)
     retval[byte + 1] = 1 << bit
     return bytes(retval)
+  
+  def set_node_id(self, node):
+    self._writer_queue.put(self._set_node_address_cmd(node))
+    super().set_node_id(node)
   
   def _reader_run(self):
     self._reader_started_event.set()

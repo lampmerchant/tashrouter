@@ -145,13 +145,13 @@ class EtherTalkPort(Port):
                                                                      0, 0,
                                                                      0, network, node))))
   
-  def _add_address_mapping(self, network, node, hw_addr):
+  def _add_address_mapping(self, network, node, mapped_hw_addr):
     '''Add an address mapping for the given network, node, and Ethernet address and release any held Datagrams waiting on it.'''
     datagrams_to_send = deque()
     with self._tables_lock:
-      self._address_mapping_table[(network, node)] = (hw_addr, time.monotonic())
+      self._address_mapping_table[(network, node)] = (mapped_hw_addr, time.monotonic())
       if (network, node) in self._held_datagrams:
-        for datagram, _ in self._held_datagrams[(network, node)]: datagrams_to_send.append((hw_addr, datagram))
+        for datagram, _ in self._held_datagrams[(network, node)]: datagrams_to_send.append((mapped_hw_addr, datagram))
         self._held_datagrams.pop((network, node))
     for hw_addr, datagram in datagrams_to_send: self._send_datagram(hw_addr, datagram)
   

@@ -26,7 +26,6 @@ class ZoneInformationTable:
   '''Zone Information Table (ZIT).'''
   
   def __init__(self, router):
-    #TODO keep track of default zone name for each network
     self._router = router
     self._network_min_to_network_max = {}
     self._network_min_to_zone_name_set = {}

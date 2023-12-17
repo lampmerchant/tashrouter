@@ -103,6 +103,7 @@ class LocalTalkPort(Port):
     self._node_stopped_event.wait()
   
   def inbound_frame(self, frame_data):
+    '''Called by subclass when an inbound LocalTalk frame is received.'''
     if len(frame_data) < 3: return  # invalid frame, too short
     destination_node, source_node, llap_type = struct.unpack('>BBB', frame_data[0:3])
     # short-header data frame
@@ -137,10 +138,11 @@ class LocalTalkPort(Port):
             random.shuffle(self._desired_node_list)
   
   def send_frame(self, frame_data):
+    '''Implemented by subclass to send an outbound LocalTalk frame.'''
     raise NotImplementedError('subclass must override "send_frame" method')
   
   def set_node_id(self, node):
-    # subclass may override and call to this
+    '''Called when a LocalTalk node ID is settled on.  May be overridden by subclass.'''
     self.node = node
   
   def send(self, network, node, datagram):

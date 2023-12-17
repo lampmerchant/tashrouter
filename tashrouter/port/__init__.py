@@ -18,12 +18,16 @@ class Port:
   network_max: int
   extended_network: bool
   
+  def short_str(self):
+    '''Return a short string representation of this Port.'''
+    raise NotImplementedError('subclass must override "short_str" method')
+  
   def start(self, router):
-    '''Start this port running.'''
+    '''Start this Port running.'''
     raise NotImplementedError('subclass must override "start" method')
   
   def stop(self):
-    '''Stop this port from running.'''
+    '''Stop this Port from running.'''
     raise NotImplementedError('subclass must override "stop" method')
   
   def send(self, network, node, datagram):
