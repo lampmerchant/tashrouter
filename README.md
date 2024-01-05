@@ -1,6 +1,6 @@
 # TashRouter
 
-An AppleTalk router that supports LocalTalk (via LToUDP and/or TashTalk) in addition to EtherTalk.
+An AppleTalk router that supports LocalTalk (via [LToUDP](https://windswept.home.blog/2019/12/10/localtalk-over-udp/) and/or [TashTalk](https://github.com/lampmerchant/tashtalk)) in addition to EtherTalk.
 
 ## Status
 
