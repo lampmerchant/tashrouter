@@ -47,8 +47,8 @@ class LtoudpPort(LocalTalkPort):
     super().start(router)
     self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-    self._socket.bind((self.LTOUDP_GROUP, self.LTOUDP_PORT))
+    if hasattr(socket, 'SO_REUSEPORT'): self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+    self._socket.bind((self._intf_address, self.LTOUDP_PORT))
     self._socket.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 1)
     for attempt in range(self.NETWORK_UP_RETRY_COUNT):
       try:
