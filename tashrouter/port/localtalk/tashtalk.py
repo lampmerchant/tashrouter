@@ -29,7 +29,7 @@ class TashTalkPort(LocalTalkPort):
     self._writer_stopped_event = Event()
   
   def short_str(self):
-    return self._serial_port.removeprefix('/dev/')
+    return self._serial_port[5:] if self._serial_port.startswith('/dev/') else self._serial_port
   
   __str__ = short_str
   __repr__ = short_str

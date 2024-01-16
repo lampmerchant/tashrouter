@@ -26,7 +26,7 @@ Put something like this into `test_router.py` at the same level as the `tashrout
 import logging
 import time
 
-import tashrouter.netlog
+from tashrouter.netlog import set_log_str_func
 from tashrouter.port.ethertalk.macvtap import MacvtapPort
 from tashrouter.port.localtalk.ltoudp import LtoudpPort
 from tashrouter.port.localtalk.tashtalk import TashTalkPort
@@ -34,16 +34,16 @@ from tashrouter.router.router import Router
 
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s')
-tashrouter.netlog.set_log_str_func(logging.debug)  # comment this line for speed and reduced spam
+set_log_str_func(logging.debug)  # comment this line for speed and reduced spam
 
 router = Router('router', ports=(
   LtoudpPort(seed_network=1, seed_zone_name=b'LToUDP Network'),
   TashTalkPort(serial_port='/dev/ttyAMA0', seed_network=2, seed_zone_name=b'TashTalk Network'),
   MacvtapPort(macvtap_name='macvtap0', seed_network_min=3, seed_network_max=5, seed_zone_names=[b'EtherTalk Network']),
 ))
+
 print('router away!')
 router.start()
-
 try:
   while True: time.sleep(1)
 except KeyboardInterrupt:

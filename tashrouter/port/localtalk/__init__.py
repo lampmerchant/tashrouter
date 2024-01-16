@@ -150,9 +150,9 @@ class LocalTalkPort(Port):
     if self.node == 0: return
     log_datagram_outbound(network, node, datagram, self)
     if datagram.destination_network == datagram.source_network and datagram.destination_network in (0, self.network):
-      self.send_frame(bytes((node, self.node, 1)) + datagram.as_short_header_bytes())
+      self.send_frame(bytes((node, self.node, self.LLAP_APPLETALK_SHORT_HEADER)) + datagram.as_short_header_bytes())
     else:
-      self.send_frame(bytes((node, self.node, 2)) + datagram.as_long_header_bytes())
+      self.send_frame(bytes((node, self.node, self.LLAP_APPLETALK_LONG_HEADER)) + datagram.as_long_header_bytes())
   
   def multicast(self, zone_name, datagram):
     if self.node == 0: return
