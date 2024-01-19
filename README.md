@@ -8,11 +8,11 @@ TashRouter is a fully standards-compliant AppleTalk router that supports LocalTa
 
 ### What can it do?
 
-TashRouter can connect multiple AppleTalk networks of different types and define zones in them.  It can fully replace the functionality of EtherTalk bridge devices (such as AsantéTalk) without resorting to the kinds of hackish and standards-breaking shortcuts that they use.  For example, you could connect an instance of [Mini vMac](https://www.gryphel.com/c/minivmac/index.html) v37 (which can emulate LocalTalk using LToUDP) and a Macintosh 512ke (which can connect to a LocalTalk network using [TashTalk](https://github.com/lampmerchant/tashtalk)) to a [Netatalk](https://github.com/Netatalk/netatalk) v2.x server to share files and printers.
+TashRouter can connect multiple AppleTalk networks of different types and define zones in them.  It can fully replace the functionality of EtherTalk bridge devices (such as AsantéTalk) without resorting to the kinds of standards-breaking hacks that they use.  For example, you could connect an instance of [Mini vMac](https://www.gryphel.com/c/minivmac/index.html) [v37](https://68kmla.org/bb/index.php?threads/emulation-binaries-for-mini-vmac-37-with-ltoudp.46443/) (which can emulate LocalTalk over LToUDP) and a Macintosh 512k (which can connect to a LocalTalk network that TashRouter can access using [TashTalk](https://github.com/lampmerchant/tashtalk)) to a [Netatalk](https://github.com/Netatalk/netatalk) v2.x server to share files and printers.
 
 ### What do I need to run it?
 
-A single-board computer such as a Raspberry Pi makes an ideal host for TashRouter.  A [TashTalk Hat](https://ko-fi.com/s/60b561a0e3) will allow a device with a Raspberry Pi-compatible GPIO header to connect to a LocalTalk network.  However, any computer that can run [Python](https://www.python.org/) v3.x can run TashRouter.  For example, a server running [Void Linux](https://voidlinux.org/) can route between an EtherTalk network and a LocalTalk network running LToUDP, while an [AirTalk](https://airtalk.shop/product/airtalk-complete/) wirelessly bridges the LToUDP network to physical LocalTalk devices.
+A single-board computer such as a Raspberry Pi makes an ideal host for TashRouter.  A [TashTalk Hat](https://ko-fi.com/s/60b561a0e3) will allow a device with a Raspberry Pi-compatible GPIO header to connect to a LocalTalk network.  However, any computer that can run [Python](https://www.python.org/) v3.x can run TashRouter.  For example, a server running [Void Linux](https://voidlinux.org/) can route between an EtherTalk network and a LocalTalk network running LToUDP, while an [AirTalk](https://airtalk.shop/product/airtalk-complete/) wirelessly bridges the LToUDP network to a physical LocalTalk network.
 
 ### Where can I get support?
 
@@ -22,7 +22,7 @@ There is a thread on the [68kMLA forum](https://68kmla.org/bb/index.php?threads/
 
 Not mature yet, but ready for some real world experience.
 
-## Quick Start
+## Quick Start - macvtap
 
 ### Creating a macvtap device
 
@@ -71,3 +71,6 @@ except KeyboardInterrupt:
 
 Run the script you just created: `python3 test_router.py`
 
+## Using TashRouter with a tap and Netatalk 2.x
+
+See [this post](https://68kmla.org/bb/index.php?threads/tashrouter-an-appletalk-router.46047/post-518796) on the 68kMLA forum.
