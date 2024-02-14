@@ -33,6 +33,7 @@ A macvtap device is necessary to support EtherTalk.  Not all kernels may have su
 ```
 # ip link add link eth0 name macvtap0 type macvtap
 # ip link set dev macvtap0 promisc on
+# ip link set dev macvtap0 up
 ```
 
 This process can be automated, though the method of doing so depends on your operating system.  In Void Linux, for example, the above commands can be added to `rc.local`.
