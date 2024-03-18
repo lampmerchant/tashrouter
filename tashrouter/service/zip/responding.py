@@ -155,8 +155,7 @@ class ZipRespondingService(Service, ZipService):
   
   @classmethod
   def _get_my_zone(cls, router, datagram, rx_port):
-    _, _, tid, _, _, start_index = struct.unpack('>BBHBBH', datagram.data)
-    if start_index != 0: return
+    _, _, tid, _, _, _ = struct.unpack('>BBHBBH', datagram.data)
     entry, _ = router.routing_table.get_by_network(datagram.source_network)
     if entry is None: return
     try:
