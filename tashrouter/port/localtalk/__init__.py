@@ -157,7 +157,7 @@ class LocalTalkPort(Port):
   def multicast(self, zone_name, datagram):
     if self.node == 0: return
     log_datagram_multicast(zone_name, datagram, self)
-    self.send_frame(bytes((0xFF, self.node, 1)) + datagram.as_short_header_bytes())
+    self.send_frame(bytes((0xFF, self.node, self.LLAP_APPLETALK_SHORT_HEADER)) + datagram.as_short_header_bytes())
   
   def _set_network(self, network):
     logging.info('%s assigned network number %d', str(self), network)

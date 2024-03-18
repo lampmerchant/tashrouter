@@ -106,15 +106,10 @@ class Datagram:
                          self.ddp_type)
     data = header + self.data
     length = 4 + len(data)
-    checksum = 0
-    for byte in data:
-      checksum += byte
-      checksum = (checksum & 0x7FFF) << 1 | (1 if checksum & 0x8000 else 0)
-    checksum = checksum or 0xFFFF  # because a zero value in the checksum field means one was not calculated
     header = struct.pack('>BBH',
                          (self.hop_count & 0xF) << 2 | (length & 0x300) >> 8,
                          length & 0xFF,
-                         checksum)
+                         ddp_checksum(data))
     return header + data
   
   def as_short_header_bytes(self):
