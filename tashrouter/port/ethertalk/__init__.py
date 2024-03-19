@@ -9,7 +9,7 @@ import time
 
 from .. import Port
 from ...datagram import Datagram, ddp_checksum
-from ...netlog import log_datagram_inbound, log_datagram_outbound, log_datagram_multicast
+from ...netlog import log_datagram_inbound, log_datagram_unicast, log_datagram_broadcast, log_datagram_multicast
 from ...netlog import log_ethernet_frame_inbound, log_ethernet_frame_outbound
 from ...router.zone_information_table import ucase
 
@@ -289,15 +289,12 @@ class EtherTalkPort(Port):
     self._age_address_mapping_table_stopped_event.wait()
     self._acquire_network_and_node_stopped_event.wait()
   
-  def send(self, network, node, datagram):
-    '''Called by Router to send a Datagram to a given network and node.'''
-    log_datagram_outbound(network, node, datagram, self)
+  def unicast(self, network, node, datagram):
+    log_datagram_unicast(network, node, datagram, self)
     send_datagram = None
     send_aarp_request = None
     with self._tables_lock:
-      if node == 0xFF:
-        send_datagram = (self.ELAP_BROADCAST_ADDR, datagram)
-      elif (network, node) in self._address_mapping_table:
+      if (network, node) in self._address_mapping_table:
         hw_addr, _ = self._address_mapping_table[(network, node)]
         send_datagram = (hw_addr, datagram)
       elif (network, node) in self._held_datagrams:
@@ -312,8 +309,13 @@ class EtherTalkPort(Port):
       network, node = send_aarp_request
       self._send_aarp_request(network, node)
   
+  def broadcast(self, datagram):
+    log_datagram_broadcast(datagram, self)
+    if (datagram.destination_network, datagram.destination_node) != (0x0000, 0xFF):
+      datagram = datagram.copy(destination_network=0x0000, destination_node=0xFF)
+    self._send_datagram(self.ELAP_BROADCAST_ADDR, datagram)
+  
   def multicast(self, zone_name, datagram):
-    '''Called by Router to make a zone-wide multicast of a Datagram.'''
     log_datagram_multicast(zone_name, datagram, self)
     self._send_datagram(self.multicast_address(zone_name), datagram)
   

@@ -134,7 +134,7 @@ class Router:
       # if the hop count is too high, discard the Datagram
       if datagram.hop_count >= 15: return
       # else, increment the hop count and send the Datagram to the next router
-      entry.port.send(entry.next_network, entry.next_node, datagram.hop())
+      entry.port.unicast(entry.next_network, entry.next_node, datagram.hop())
       return
     # special 'any router' address (see IA page 4-7), control plane's responsibility; discard the Datagram
     elif datagram.destination_node == 0x00:
@@ -144,7 +144,7 @@ class Router:
       return
     # the destination is connected to us directly; send the Datagram to its final destination
     else:
-      entry.port.send(datagram.destination_network, datagram.destination_node, datagram)
+      entry.port.unicast(datagram.destination_network, datagram.destination_node, datagram)
       return
   
   def reply(self, datagram, rx_port, ddp_type, data):
@@ -153,15 +153,15 @@ class Router:
     if datagram.source_node in (0x00, 0xFF):
       pass  # invalid as source, don't reply
     elif (datagram.source_network == 0x0000 or 0xFF00 <= datagram.source_network <= 0xFFFE) and rx_port.node:
-      rx_port.send(datagram.source_network, datagram.source_node, Datagram(hop_count=0,
-                                                                           destination_network=datagram.source_network,
-                                                                           source_network=rx_port.network,
-                                                                           destination_node=datagram.source_node,
-                                                                           source_node=rx_port.node,
-                                                                           destination_socket=datagram.source_socket,
-                                                                           source_socket=datagram.destination_socket,
-                                                                           ddp_type=ddp_type,
-                                                                           data=data))
+      rx_port.unicast(datagram.source_network, datagram.source_node, Datagram(hop_count=0,
+                                                                              destination_network=datagram.source_network,
+                                                                              source_network=rx_port.network,
+                                                                              destination_node=datagram.source_node,
+                                                                              source_node=rx_port.node,
+                                                                              destination_socket=datagram.source_socket,
+                                                                              source_socket=datagram.destination_socket,
+                                                                              ddp_type=ddp_type,
+                                                                              data=data))
     else:
       self.route(Datagram(hop_count=0,
                           destination_network=datagram.source_network,

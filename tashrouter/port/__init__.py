@@ -30,9 +30,13 @@ class Port:
     '''Stop this Port from running.'''
     raise NotImplementedError('subclass must override "stop" method')
   
-  def send(self, network, node, datagram):
-    '''Send a Datagram to an address over this Port.'''
-    raise NotImplementedError('subclass must override "send" method')
+  def unicast(self, network, node, datagram):
+    '''Send a Datagram to a single address over this Port.'''
+    raise NotImplementedError('subclass must override "unicast" method')
+  
+  def broadcast(self, datagram):
+    '''Broadcast a Datagram over this Port.'''
+    raise NotImplementedError('subclass must override "broadcast" method')
   
   def multicast(self, zone_name, datagram):
     '''Multicast a Datagram to a zone over this Port.'''

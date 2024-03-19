@@ -91,15 +91,15 @@ class NameInformationService(Service):
         
         # if zone is still *, just broadcast a LkUp on the requesting network and call it done
         if zone_field == b'*':
-          rx_port.send(rx_port.network, 0xFF, Datagram(hop_count=0,
-                                                       destination_network=rx_port.network,
-                                                       source_network=rx_port.network,
-                                                       destination_node=0xFF,
-                                                       source_node=rx_port.node,
-                                                       destination_socket=self.NBP_SAS,
-                                                       source_socket=self.NBP_SAS,
-                                                       ddp_type=self.NBP_DDP_TYPE,
-                                                       data=lkup_data))
+          rx_port.broadcast(Datagram(hop_count=0,
+                                     destination_network=0x0000,
+                                     source_network=rx_port.network,
+                                     destination_node=0xFF,
+                                     source_node=rx_port.node,
+                                     destination_socket=self.NBP_SAS,
+                                     source_socket=self.NBP_SAS,
+                                     ddp_type=self.NBP_DDP_TYPE,
+                                     data=lkup_data))
         # we know the zone, so multicast LkUps to directly-connected networks and send FwdReqs to non-directly-connected ones
         else:
           entries = set(router.routing_table.get_by_network(network)

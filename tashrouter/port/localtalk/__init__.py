@@ -7,7 +7,7 @@ from threading import Thread, Event, Lock
 
 from .. import Port
 from ...datagram import Datagram
-from ...netlog import log_datagram_inbound, log_datagram_outbound, log_datagram_multicast
+from ...netlog import log_datagram_inbound, log_datagram_unicast, log_datagram_broadcast, log_datagram_multicast
 
 
 class FcsCalculator:
@@ -145,14 +145,19 @@ class LocalTalkPort(Port):
     '''Called when a LocalTalk node ID is settled on.  May be overridden by subclass.'''
     self.node = node
   
-  def send(self, network, node, datagram):
+  def unicast(self, network, node, datagram):
     if network not in (0, self.network): return
     if self.node == 0: return
-    log_datagram_outbound(network, node, datagram, self)
+    log_datagram_unicast(network, node, datagram, self)
     if datagram.destination_network == datagram.source_network and datagram.destination_network in (0, self.network):
       self.send_frame(bytes((node, self.node, self.LLAP_APPLETALK_SHORT_HEADER)) + datagram.as_short_header_bytes())
     else:
       self.send_frame(bytes((node, self.node, self.LLAP_APPLETALK_LONG_HEADER)) + datagram.as_long_header_bytes())
+  
+  def broadcast(self, datagram):
+    if self.node == 0: return
+    log_datagram_broadcast(datagram, self)
+    self.send_frame(bytes((0xFF, self.node, self.LLAP_APPLETALK_SHORT_HEADER)) + datagram.as_short_header_bytes())
   
   def multicast(self, zone_name, datagram):
     if self.node == 0: return

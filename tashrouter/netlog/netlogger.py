@@ -51,10 +51,15 @@ class NetLogger:
     if not self._logging_on: return
     self._log_str('in to %d.%d' % (network, node), port.short_str(), datagram_header(datagram), datagram.data)
   
-  def log_datagram_outbound(self, network, node, datagram, port):
-    '''Log an outbound DDP Datagram.'''
+  def log_datagram_unicast(self, network, node, datagram, port):
+    '''Log a unicast DDP Datagram.'''
     if not self._logging_on: return
     self._log_str('out to %d.%d' % (network, node), port.short_str(), datagram_header(datagram), datagram.data)
+  
+  def log_datagram_broadcast(self, datagram, port):
+    '''Log a broadcast DDP Datagram.'''
+    if not self._logging_on: return
+    self._log_str('out broadcast', port.short_str(), datagram_header(datagram), datagram.data)
   
   def log_datagram_multicast(self, zone_name, datagram, port):
     '''Log a multicast DDP Datagram.'''
