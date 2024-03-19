@@ -135,17 +135,18 @@ class Router:
       if datagram.hop_count >= 15: return
       # else, increment the hop count and send the Datagram to the next router
       entry.port.unicast(entry.next_network, entry.next_node, datagram.hop())
-      return
     # special 'any router' address (see IA page 4-7), control plane's responsibility; discard the Datagram
     elif datagram.destination_node == 0x00:
-      return
+      pass
     # addressed to another port of this router's, control plane's responsibility; discard the Datagram
     elif datagram.destination_network == entry.port.network and datagram.destination_node == entry.port.node:
-      return
+      pass
+    # the destination is a broadcast to a network to which we are directly connected
+    elif datagram.destination_node == 0xFF:
+      entry.port.broadcast(datagram)
     # the destination is connected to us directly; send the Datagram to its final destination
     else:
       entry.port.unicast(datagram.destination_network, datagram.destination_node, datagram)
-      return
   
   def reply(self, datagram, rx_port, ddp_type, data):
     '''Build and send a reply Datagram to the given Datagram coming in over the given Port with the given data.'''
