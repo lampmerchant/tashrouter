@@ -26,8 +26,8 @@ class MacvtapPort(EtherTalkPort):
   TUNSETIFF = 0x400454CA
   IFF_VNET_HDR = 0x4000
   
-  def __init__(self, macvtap_name=None, seed_network_min=0, seed_network_max=0, seed_zone_names=()):
-    super().__init__(None, seed_network_min, seed_network_max, seed_zone_names)
+  def __init__(self, macvtap_name=None, **kwargs):
+    super().__init__(None, **kwargs)
     self._reader_thread = None
     self._reader_started_event = Event()
     self._reader_stop_requested = False

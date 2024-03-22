@@ -9,8 +9,8 @@ from . import EtherTalkPort
 class VirtualEtherTalkPort(EtherTalkPort):
   '''Virtual EtherTalk Port.'''
   
-  def __init__(self, virtual_network, hw_addr, short_str=None, seed_network_min=0, seed_network_max=0, seed_zone_names=()):
-    super().__init__(hw_addr, seed_network_min, seed_network_max, seed_zone_names)
+  def __init__(self, virtual_network, hw_addr, short_str=None, **kwargs):
+    super().__init__(hw_addr, **kwargs)
     self._virtual_network = virtual_network
     self._short_str = short_str or 'Virtual'
   

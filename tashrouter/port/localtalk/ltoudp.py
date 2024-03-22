@@ -24,8 +24,8 @@ class LtoudpPort(LocalTalkPort):
   NETWORK_UP_RETRY_TIMEOUT = 1  # seconds
   NETWORK_UP_RETRY_COUNT = 10
   
-  def __init__(self, intf_address=DEFAULT_INTF_ADDRESS, seed_network=0, seed_zone_name=None):
-    super().__init__(seed_network=seed_network, seed_zone_name=seed_zone_name, respond_to_enq=True)
+  def __init__(self, intf_address=DEFAULT_INTF_ADDRESS, **kwargs):
+    super().__init__(respond_to_enq=True, **kwargs)
     self._intf_address = intf_address
     self._socket = None
     self._sender_id = None
