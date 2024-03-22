@@ -30,7 +30,7 @@ class Datagram:
   data: bytes
   
   @classmethod
-  def from_long_header_bytes(cls, data):
+  def from_long_header_bytes(cls, data, verify_checksum=True):
     '''Construct a Datagram object from bytes in the long-header format and raise ValueErrors if there are issues.'''
     if len(data) < 13: raise ValueError('data too short, must be at least 13 bytes for long-header DDP datagram')
     (first, second, checksum, destination_network, source_network, destination_node, source_node, destination_socket, source_socket,
@@ -42,7 +42,7 @@ class Datagram:
       raise ValueError('invalid long DDP header, length %d is greater than %d' % (length, cls.MAX_DATA_LENGTH))
     if length != len(data):
       raise ValueError('invalid long DDP header, length field says %d but actual length is %d' % (length, len(data)))
-    if checksum != 0:
+    if checksum != 0 and verify_checksum:
       calc_checksum = ddp_checksum(data[4:])
       if calc_checksum != checksum:
         raise ValueError('invalid long DDP header, checksum is 0x%04X but should be 0x%04X' % (checksum, calc_checksum))
@@ -91,7 +91,7 @@ class Datagram:
       if not min_value <= value <= max_value:
         raise ValueError('invalid %s %d, must be in range %d-%d' % (name, value, min_value, max_value))
   
-  def as_long_header_bytes(self):
+  def as_long_header_bytes(self, calculate_checksum=True):
     '''Return this Datagram in long-header format as bytes and raise ValueErrors if there are issues.'''
     self._check_ranges()
     if len(self.data) > self.MAX_DATA_LENGTH:
@@ -109,7 +109,7 @@ class Datagram:
     header = struct.pack('>BBH',
                          (self.hop_count & 0xF) << 2 | (length & 0x300) >> 8,
                          length & 0xFF,
-                         ddp_checksum(data))
+                         ddp_checksum(data) if calculate_checksum else 0x0000)
     return header + data
   
   def as_short_header_bytes(self):

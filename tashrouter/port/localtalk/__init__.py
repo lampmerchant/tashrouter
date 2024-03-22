@@ -73,7 +73,8 @@ class LocalTalkPort(Port):
   LLAP_ENQ = 0x81
   LLAP_ACK = 0x82
   
-  def __init__(self, seed_network=0, seed_zone_name=None, respond_to_enq=True, desired_node=0xFE):
+  def __init__(self, seed_network=0, seed_zone_name=None, respond_to_enq=True, desired_node=0xFE, verify_checksums=True, 
+               calculate_checksums=True):
     if seed_network and not seed_zone_name or seed_zone_name and not seed_network:
       raise ValueError('seed_network and seed_zone_name must be provided or omitted together')
     self.network = self.network_min = self.network_max = seed_network
@@ -86,6 +87,8 @@ class LocalTalkPort(Port):
     self._desired_node_list = list(i for i in range(1, 0xFE + 1) if i != self._desired_node)
     random.shuffle(self._desired_node_list)
     self._desired_node_attempts = 0
+    self._verify_checksums = verify_checksums
+    self._calculate_checksums = calculate_checksums
     self._node_thread = None
     self._node_lock = Lock()
     self._node_started_event = Event()
@@ -118,7 +121,7 @@ class LocalTalkPort(Port):
     # long-header data frame
     elif llap_type == self.LLAP_APPLETALK_LONG_HEADER:
       try:
-        datagram = Datagram.from_long_header_bytes(frame_data[3:])
+        datagram = Datagram.from_long_header_bytes(frame_data[3:], verify_checksum=self._verify_checksums)
       except ValueError as e:
         logging.debug('%s failed to parse long-header AppleTalk datagram from LocalTalk frame: %s', str(self), e.args[0])
       else:
@@ -152,7 +155,8 @@ class LocalTalkPort(Port):
     if datagram.destination_network == datagram.source_network and datagram.destination_network in (0, self.network):
       self.send_frame(bytes((node, self.node, self.LLAP_APPLETALK_SHORT_HEADER)) + datagram.as_short_header_bytes())
     else:
-      self.send_frame(bytes((node, self.node, self.LLAP_APPLETALK_LONG_HEADER)) + datagram.as_long_header_bytes())
+      self.send_frame(bytes((node, self.node, self.LLAP_APPLETALK_LONG_HEADER))
+                      + datagram.as_long_header_bytes(calculate_checksum=self._calculate_checksums))
   
   def broadcast(self, datagram):
     if self.node == 0: return

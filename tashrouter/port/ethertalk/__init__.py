@@ -50,7 +50,8 @@ class EtherTalkPort(Port):
   HELD_DATAGRAM_AGE_INTERVAL = 1  # seconds
   HELD_DATAGRAM_AARP_REQUEST_INTERVAL = 0.25  # seconds
   
-  def __init__(self, hw_addr, seed_network_min=0, seed_network_max=0, seed_zone_names=(), desired_network=0, desired_node=0):
+  def __init__(self, hw_addr, seed_network_min=0, seed_network_max=0, seed_zone_names=(), desired_network=0, desired_node=0,
+               verify_checksums=True, calculate_checksums=True):
     if seed_network_min and not seed_network_max or seed_network_max and not seed_network_min:
       raise ValueError('seed_network_min and seed_network_max must be provided or omitted together')
     if seed_network_min and not seed_zone_names or seed_zone_names and not seed_network_min:
@@ -71,6 +72,8 @@ class EtherTalkPort(Port):
     else:
       self._desired_network_list = []
       self._desired_node_list = []
+    self._verify_checksums = verify_checksums
+    self._calculate_checksums = calculate_checksums
     self._aarp_probe_attempts = 0
     self._aarp_probe_lock = Lock()
     self._router = None
@@ -115,7 +118,8 @@ class EtherTalkPort(Port):
   
   def _send_datagram(self, hw_addr, datagram):
     '''Turn a Datagram into an Ethernet frame and send it to the given address.'''
-    self._send_frame(hw_addr, b''.join((self.APPLETALK_HEADER, datagram.as_long_header_bytes())))
+    self._send_frame(hw_addr, b''.join((self.APPLETALK_HEADER,
+                                        datagram.as_long_header_bytes(calculate_checksum=self._calculate_checksums))))
   
   def _send_aarp_request(self, network, node):
     '''Create an AARP request for the given network and node and broadcast it to all AppleTalk nodes.'''
@@ -248,7 +252,7 @@ class EtherTalkPort(Port):
       log_ethernet_frame_inbound(frame_data, self)
       
       try:
-        datagram = Datagram.from_long_header_bytes(frame_data[22:14 + length])
+        datagram = Datagram.from_long_header_bytes(frame_data[22:14 + length], verify_checksum=self._verify_checksums)
       except ValueError as e:
         logging.debug('%s failed to parse AppleTalk datagram from EtherTalk frame: %s', str(self), e.args[0])
       else:
