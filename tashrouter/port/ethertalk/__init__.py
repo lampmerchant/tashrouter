@@ -123,7 +123,7 @@ class EtherTalkPort(Port):
   
   def _send_aarp_request(self, network, node):
     '''Create an AARP request for the given network and node and broadcast it to all AppleTalk nodes.'''
-    if not self.network or not self.node: return
+    if not self.network or not self.node or node == 0xFF: return
     self._send_frame(self.ELAP_BROADCAST_ADDR, b''.join((self.AARP_HEADER, struct.pack('>H', self.AARP_REQUEST),
                                                          self._hw_addr,
                                                          struct.pack('>BHBHLBHB',
