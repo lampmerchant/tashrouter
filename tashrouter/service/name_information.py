@@ -20,6 +20,7 @@ class NameInformationService(Service):
   NBP_CTRL_FWDREQ = 4
   
   MAX_FIELD_LEN = 32
+  target_network: int
   
   def __init__(self):
     self.thread = None
@@ -106,9 +107,13 @@ class NameInformationService(Service):
                         for network in router.zone_information_table.networks_in_zone(zone_field))
           entries.discard((None, None))
           for entry, _ in entries:
+            if entry.extended_network:
+              target_network = 0x0000
+            else:
+              target_network = entry.port.network
             if entry.distance == 0:
               entry.port.multicast(zone_field, Datagram(hop_count=0,
-                                                        destination_network=0x0000,
+                                                        destination_network=target_network,
                                                         source_network=entry.port.network,
                                                         destination_node=0xFF,
                                                         source_node=entry.port.node,
@@ -131,8 +136,12 @@ class NameInformationService(Service):
         
         entry, _ = router.routing_table.get_by_network(datagram.destination_network)
         if entry is None or entry.distance != 0: continue  # FwdReq thinks we're directly connected to this network but we're not
+        if entry.extended_network:
+          target_network = 0x0000
+        else:
+          target_network = entry.port.network
         entry.port.multicast(zone_field, Datagram(hop_count=0,
-                                                  destination_network=0x0000,
+                                                  destination_network=target_network,
                                                   source_network=entry.port.network,
                                                   destination_node=0xFF,
                                                   source_node=entry.port.node,
