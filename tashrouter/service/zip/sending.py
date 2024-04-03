@@ -61,15 +61,26 @@ class ZipSendingService(Service, ZipService):
         for network_min in chain(network_mins, (None,)):
           if network_min is None or len(datagram_data) * 2 + 4 > Datagram.MAX_DATA_LENGTH:
             datagram_data.appendleft(struct.pack('>BB', self.ZIP_FUNC_QUERY, len(datagram_data)))
-            port.unicast(network, node, Datagram(hop_count=0,
-                                                 destination_network=network,
-                                                 source_network=port.network,
-                                                 destination_node=node,
-                                                 source_node=port.node,
-                                                 destination_socket=self.ZIP_SAS,
-                                                 source_socket=self.ZIP_SAS,
-                                                 ddp_type=self.ZIP_DDP_TYPE,
-                                                 data=b''.join(datagram_data)))
+            if (network, node) == (0x0000, 0xFF):
+              port.broadcast(Datagram(hop_count=0,
+                                      destination_network=network,
+                                      source_network=port.network,
+                                      destination_node=node,
+                                      source_node=port.node,
+                                      destination_socket=self.ZIP_SAS,
+                                      source_socket=self.ZIP_SAS,
+                                      ddp_type=self.ZIP_DDP_TYPE,
+                                      data=b''.join(datagram_data)))
+            else:
+              port.unicast(network, node, Datagram(hop_count=0,
+                                                   destination_network=network,
+                                                   source_network=port.network,
+                                                   destination_node=node,
+                                                   source_node=port.node,
+                                                   destination_socket=self.ZIP_SAS,
+                                                   source_socket=self.ZIP_SAS,
+                                                   ddp_type=self.ZIP_DDP_TYPE,
+                                                   data=b''.join(datagram_data)))
             if network_min is not None: datagram_data = deque((struct.pack('>H', network_min),))
           else:
             datagram_data.append(struct.pack('>H', network_min))
