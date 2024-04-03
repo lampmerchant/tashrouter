@@ -71,6 +71,9 @@ class RoutingTable:
       cur_entries = set(self._entry_by_network.get(network) for network in range(entry.network_min, entry.network_max + 1))
       if len(cur_entries) != 1: return False  # this network range overlaps one that's already defined, can't do anything with it
       cur_entry = cur_entries.pop()
+
+      # reject entries in the startup network range. netatalk's atalkd likes to output tuples with these under certain conditions
+      if entry.next_network >= 0xff00 or entry.network_min >= 0xff00 or entry.network_max >= 0xff00: return False
       
       # range currently undefined, add new entry to the table
       if cur_entry is None:
