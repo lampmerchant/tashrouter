@@ -153,7 +153,7 @@ class Router:
     
     if datagram.source_node in (0x00, 0xFF):
       pass  # invalid as source, don't reply
-    elif (datagram.source_network == 0x0000 or 0xFF00 <= datagram.source_network <= 0xFFFE) and rx_port.node:
+    elif (datagram.source_network == 0x0000 or 0xFF00 <= datagram.source_network <= 0xFFFE or datagram.destination_socket == 0x06) and rx_port.node:
       rx_port.unicast(datagram.source_network, datagram.source_node, Datagram(hop_count=0,
                                                                               destination_network=datagram.source_network,
                                                                               source_network=rx_port.network,
