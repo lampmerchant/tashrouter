@@ -153,7 +153,18 @@ class Router:
     
     if datagram.source_node in (0x00, 0xFF):
       pass  # invalid as source, don't reply
-    elif (datagram.source_network == 0x0000 or 0xFF00 <= datagram.source_network <= 0xFFFE or datagram.destination_socket == 0x06) and rx_port.node:
+    elif (datagram.source_network == 0x0000 or 0xFF00 <= datagram.source_network <= 0xFFFE) and rx_port.node:
+      rx_port.unicast(datagram.source_network, datagram.source_node, Datagram(hop_count=0,
+                                                                              destination_network=datagram.source_network,
+                                                                              source_network=rx_port.network,
+                                                                              destination_node=datagram.source_node,
+                                                                              source_node=rx_port.node,
+                                                                              destination_socket=datagram.source_socket,
+                                                                              source_socket=datagram.destination_socket,
+                                                                              ddp_type=ddp_type,
+                                                                              data=data))
+    # take care of possible ZIP GetNetInfo broadcast packets from a client with a stale network address outside of our net range.
+    elif (not rx_port.network_min <= datagram.source_network <= rx_port.network_max and datagram.destination_node == 0xFF and ddp_type == 0x06) and rx_port.node:
       rx_port.unicast(datagram.source_network, datagram.source_node, Datagram(hop_count=0,
                                                                               destination_network=datagram.source_network,
                                                                               source_network=rx_port.network,
