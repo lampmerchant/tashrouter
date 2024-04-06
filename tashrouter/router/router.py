@@ -17,12 +17,12 @@ from ..service.zip.sending import ZipSendingService
 class Router:
   '''A router, a device which sends Datagrams to Ports and runs Services.'''
   
-  def __init__(self, short_str, ports):
+  def __init__(self, short_str, ports, route_lkup_replies=False):
     self._short_str = short_str
     self.ports = ports
     self._services = (
       (EchoService.ECHO_SAS, EchoService()),
-      (NameInformationService.NBP_SAS, NameInformationService()),
+      (NameInformationService.NBP_SAS, NameInformationService(route_lkup_replies)),
       (None, RoutingTableAgingService()),
       (RtmpRespondingService.RTMP_SAS, RtmpRespondingService()),
       (None, RtmpSendingService()),
@@ -107,53 +107,69 @@ class Router:
     self.route(datagram, originating=False)
   
   def route(self, datagram, originating=True):
-    '''Route a Datagram to/toward its destination.'''
+    '''Route a Datagram to/toward its destination.
     
-    if originating:
-      if datagram.hop_count != 0: raise ValueError('originated datagrams must have hop count of 0')
-      if datagram.destination_network == 0x0000: raise ValueError('originated datagrams must have nonzero destination network')
-      # we expect source_network will be zero and we'll fill it in once we know what port we're coming from
+    Return True if routed, False if not.
+    '''
     
-    # if we still don't know where we're going, we obviously can't get there; discard the Datagram
-    if datagram.destination_network == 0x0000: return
+    if originating and datagram.hop_count != 0: raise ValueError('originated datagrams must have hop count of 0')
+    
+    # if this Datagram isn't routable (addressed to 'this network', the startup range, or 0xFFFF), discard it
+    if datagram.destination_network == 0x0000 or 0xFF00 <= datagram.destination_network <= 0xFFFF: return False
     
     entry, _ = self.routing_table.get_by_network(datagram.destination_network)
     
     # you can't get there from here; discard the Datagram
-    if entry is None: return
+    if entry is None: return False
     
     # if we're originating this datagram, we expect that its source network and node will be blank
     if originating:
       # if for some reason the port is in the routing table but doesn't yet have a network and node, discard the Datagram
-      if entry.port.network == 0x0000 or entry.port.node == 0x00: return
+      if entry.port.network == 0x0000 or entry.port.node == 0x00: return False
       # else, fill in its source network and node with those of the port it's coming from
       datagram = datagram.copy(source_network=entry.port.network, source_node=entry.port.node)
     
     # if here isn't there but we know how to get there
     if entry.distance != 0:
       # if the hop count is too high, discard the Datagram
-      if datagram.hop_count >= 15: return
+      if datagram.hop_count >= 15: return False
       # else, increment the hop count and send the Datagram to the next router
       entry.port.unicast(entry.next_network, entry.next_node, datagram.hop())
+      return True
     # special 'any router' address (see IA page 4-7), control plane's responsibility; discard the Datagram
     elif datagram.destination_node == 0x00:
-      pass
+      return False
     # addressed to another port of this router's, control plane's responsibility; discard the Datagram
     elif datagram.destination_network == entry.port.network and datagram.destination_node == entry.port.node:
-      pass
+      return False
     # the destination is a broadcast to a network to which we are directly connected
     elif datagram.destination_node == 0xFF:
       entry.port.broadcast(datagram)
+      return True
     # the destination is connected to us directly; send the Datagram to its final destination
     else:
       entry.port.unicast(datagram.destination_network, datagram.destination_node, datagram)
+      return True
   
   def reply(self, datagram, rx_port, ddp_type, data):
-    '''Build and send a reply Datagram to the given Datagram coming in over the given Port with the given data.'''
+    '''Build and send a reply Datagram to the given Datagram coming in over the given Port with the given DDP type and data.
+    
+    Return True if reply sent, False if not.
+    '''
     
     if datagram.source_node in (0x00, 0xFF):
-      pass  # invalid as source, don't reply
-    elif (datagram.source_network == 0x0000 or 0xFF00 <= datagram.source_network <= 0xFFFE) and rx_port.node:
+      return False  # invalid as source, don't reply
+    elif self.route(Datagram(hop_count=0,
+                             destination_network=datagram.source_network,
+                             source_network=0,  # route will fill this in
+                             destination_node=datagram.source_node,
+                             source_node=0,  # route will fill this in
+                             destination_socket=datagram.source_socket,
+                             source_socket=datagram.destination_socket,
+                             ddp_type=ddp_type,
+                             data=data)):
+      return True
+    elif rx_port.node:
       rx_port.unicast(datagram.source_network, datagram.source_node, Datagram(hop_count=0,
                                                                               destination_network=datagram.source_network,
                                                                               source_network=rx_port.network,
@@ -163,13 +179,6 @@ class Router:
                                                                               source_socket=datagram.destination_socket,
                                                                               ddp_type=ddp_type,
                                                                               data=data))
+      return True
     else:
-      self.route(Datagram(hop_count=0,
-                          destination_network=datagram.source_network,
-                          source_network=0,  # route will fill this in
-                          destination_node=datagram.source_node,
-                          source_node=0,  # route will fill this in
-                          destination_socket=datagram.source_socket,
-                          source_socket=datagram.destination_socket,
-                          ddp_type=ddp_type,
-                          data=data))
+      return False
