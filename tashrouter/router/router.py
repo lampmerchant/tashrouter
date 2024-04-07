@@ -131,10 +131,13 @@ class Router:
       if entry.port.network == 0x0000 or entry.port.node == 0x00: return
       # else, fill in its source network and node with those of the port it's coming from
       datagram = datagram.copy(source_network=entry.port.network, source_node=entry.port.node)
+    # if we're not originating this datagram, bump its hop count
+    else:
+      datagram = datagram.hop()
     
     # here isn't there but we know how to get there; send the Datagram to the next router
     if entry.distance != 0:
-      entry.port.unicast(entry.next_network, entry.next_node, datagram.hop())
+      entry.port.unicast(entry.next_network, entry.next_node, datagram)
     # special 'any router' address (see IA page 4-7), control plane's responsibility; discard the Datagram
     elif datagram.destination_node == 0x00:
       pass
@@ -143,10 +146,10 @@ class Router:
       pass
     # the destination is a broadcast to a network to which we are directly connected; broadcast the Datagram there
     elif datagram.destination_node == 0xFF:
-      entry.port.broadcast(datagram.hop())
+      entry.port.broadcast(datagram)
     # the destination is connected to us directly; send the Datagram to its final destination
     else:
-      entry.port.unicast(datagram.destination_network, datagram.destination_node, datagram.hop())
+      entry.port.unicast(datagram.destination_network, datagram.destination_node, datagram)
   
   def reply(self, datagram, rx_port, ddp_type, data):
     '''Build and send a reply Datagram to the given Datagram coming in over the given Port with the given data.'''
