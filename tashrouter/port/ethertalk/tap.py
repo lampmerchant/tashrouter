@@ -40,9 +40,9 @@ class TapPort(EtherTalkPort):
   __repr__ = short_str
   
   def start(self, router):
-    super().start(router)
     self._fp = os.open('/dev/net/tun', os.O_RDWR)
     ioctl(self._fp, self.TUNSETIFF, struct.pack('16sH22x', self._tap_name.encode('ascii') or b'', self.IFF_TAP | self.IFF_NO_PI))
+    super().start(router)
     self._reader_thread = Thread(target=self._reader_run)
     self._reader_thread.start()
     self._writer_thread = Thread(target=self._writer_run)

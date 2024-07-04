@@ -35,12 +35,12 @@ class TashTalkPort(LocalTalkPort):
   __repr__ = short_str
   
   def start(self, router):
-    super().start(router)
     self._writer_queue.put(b''.join((
       b'\0' * 1024,  # make sure TashTalk is in a known state, first of all
       b'\x02' + (b'\0' * 32),  # set node IDs bitmap to zeroes so we don't respond to any RTSes or ENQs yet
       b'\x03\0',  # turn off optional TashTalk features
     )))
+    super().start(router)
     self._reader_thread = Thread(target=self._reader_run)
     self._reader_thread.start()
     self._writer_thread = Thread(target=self._writer_run)

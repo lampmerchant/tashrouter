@@ -44,7 +44,6 @@ class LtoudpPort(LocalTalkPort):
   __repr__ = short_str
   
   def start(self, router):
-    super().start(router)
     self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     if hasattr(socket, 'SO_REUSEPORT'): self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
@@ -60,6 +59,7 @@ class LtoudpPort(LocalTalkPort):
         if e.errno != errno.ENODEV or attempt + 1 == self.NETWORK_UP_RETRY_COUNT: raise
         time.sleep(self.NETWORK_UP_RETRY_TIMEOUT)
     self._sender_id = struct.pack('>L', os.getpid())
+    super().start(router)
     self._thread = Thread(target=self._run)
     self._thread.start()
     self._started_event.wait()
