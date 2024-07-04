@@ -47,6 +47,8 @@ Put the following into a file called `test_router.py` at the same level as the `
 ```python
 import logging
 import time
+import signal
+import sys
 
 from tashrouter.netlog import set_log_str_func
 from tashrouter.port.ethertalk.macvtap import MacvtapPort
@@ -66,9 +68,11 @@ router = Router('router', ports=(
 
 print('router away!')
 router.start()
+signal.signal(signal.SIGTERM, lambda _signo, _stack_frame: sys.exit(0))  # raises SystemExit on SIGTERM
+
 try:
   while True: time.sleep(1)
-except KeyboardInterrupt:
+except (KeyboardInterrupt, SystemExit):
   router.stop()
 ```
 
