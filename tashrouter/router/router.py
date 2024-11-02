@@ -71,6 +71,9 @@ class Router:
   
   def inbound(self, datagram, rx_port):
     '''Called by a Port when a Datagram comes in from that port.  The Datagram may be routed, delivered, both, or neither.'''
+    # if we receive a packet from source node 0.0 on an extended network, discard it
+    if datagram.source_network == 0x0000 and datagram.source_node == 0x00 and rx_port.extended_network == True:
+      return
     
     # a network number of zero means "this network", but we know what that is from the port, so sub it in
     # note that short-header Datagrams always have a network number of zero
