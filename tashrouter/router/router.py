@@ -109,6 +109,7 @@ class Router:
   def route(self, datagram, originating=True):
     '''Route a Datagram to/toward its destination.'''
     
+    # datagrams we originate are the only ones we should raise exceptions for; bad network traffic should never bring us down
     if originating:
       if datagram.hop_count != 0: raise ValueError('originated datagrams must have hop count of 0')
       if datagram.destination_network == 0x0000: raise ValueError('originated datagrams must have nonzero destination network')
@@ -131,8 +132,10 @@ class Router:
       if entry.port.network == 0x0000 or entry.port.node == 0x00: return
       # else, fill in its source network and node with those of the port it's coming from
       datagram = datagram.copy(source_network=entry.port.network, source_node=entry.port.node)
-    # if we're not originating this datagram, bump its hop count
     else:
+      # invalid values for source node, ports will refuse to send it on; discard the Datagram
+      if datagram.source_node in (0x00, 0xFF): return
+      # we're not originating this datagram, so bump its hop count
       datagram = datagram.hop()
     
     # here isn't there but we know how to get there; send the Datagram to the next router
