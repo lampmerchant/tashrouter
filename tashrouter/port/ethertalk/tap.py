@@ -40,8 +40,13 @@ class TapPort(EtherTalkPort):
   __repr__ = short_str
   
   def start(self, router):
-    self._fp = os.open('/dev/net/tun', os.O_RDWR)
-    ioctl(self._fp, self.TUNSETIFF, struct.pack('16sH22x', self._tap_name.encode('ascii') or b'', self.IFF_TAP | self.IFF_NO_PI))
+    try:
+      # open and configure Linux tap device
+      self._fp = os.open('/dev/net/tun', os.O_RDWR)
+      ioctl(self._fp, self.TUNSETIFF, struct.pack('16sH22x', self._tap_name.encode('ascii') or b'', self.IFF_TAP | self.IFF_NO_PI))
+    except:
+      # open BSD tap device if no Linux tap device
+      self._fp = os.open('/dev/' + self._tap_name, os.O_RDWR)
     super().start(router)
     self._reader_thread = Thread(target=self._reader_run)
     self._reader_thread.start()
