@@ -80,4 +80,4 @@ Run the script you just created: `python3 test_router.py`
 
 ## Using TashRouter with a tap and Netatalk 2.x
 
-See [this post](https://68kmla.org/bb/index.php?threads/tashrouter-an-appletalk-router.46047/post-518796) on the 68kMLA forum.
+See [this post](https://68kmla.org/bb/index.php?threads/tashrouter-an-appletalk-router.46047/post-518796) on the 68kMLA forum.  Note that `TapPort` has been changed to `LinuxTapPort` and `BsdTapPort` for Linux and BSD, respectively.
