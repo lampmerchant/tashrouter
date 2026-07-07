@@ -4,6 +4,7 @@ from queue import Queue, Empty
 from threading import Thread, Event
 
 import serial
+import logging
 
 from . import LocalTalkPort, FcsCalculator
 from ...netlog import log_localtalk_frame_inbound, log_localtalk_frame_outbound
@@ -75,43 +76,53 @@ class TashTalkPort(LocalTalkPort):
     super().set_node_id(node)
   
   def _reader_run(self):
-    self._reader_started_event.set()
-    fcs = FcsCalculator()
-    buf = bytearray(605)
-    buf_ptr = 0
-    escaped = False
-    while not self._reader_stop_requested:
-      for byte in self._serial_obj.read(self._serial_obj.in_waiting or 1):
-        if not escaped and byte == 0x00:
-          escaped = True
-          continue
-        elif escaped:
-          escaped = False
-          if byte == 0xFF:  # literal 0x00 byte
-            byte = 0x00
-          else:
-            if byte == 0xFD and fcs.is_okay() and buf_ptr >= 5:
-              data = bytes(buf[:buf_ptr - 2])
-              log_localtalk_frame_inbound(data, self)
-              self.inbound_frame(data)
-            fcs.reset()
-            buf_ptr = 0
+    try:
+      self._reader_started_event.set()
+      fcs = FcsCalculator()
+      buf = bytearray(605)
+      buf_ptr = 0
+      escaped = False
+      while not self._reader_stop_requested:
+        for byte in self._serial_obj.read(self._serial_obj.in_waiting or 1):
+          if not escaped and byte == 0x00:
+            escaped = True
             continue
-        if buf_ptr < len(buf):
-          fcs.feed_byte(byte)
-          buf[buf_ptr] = byte
-          buf_ptr += 1
-    self._reader_stopped_event.set()
+          elif escaped:
+            escaped = False
+            if byte == 0xFF:  # literal 0x00 byte
+              byte = 0x00
+            else:
+              if byte == 0xFD and fcs.is_okay() and buf_ptr >= 5:
+                data = bytes(buf[:buf_ptr - 2])
+                log_localtalk_frame_inbound(data, self)
+                self.inbound_frame(data)
+              fcs.reset()
+              buf_ptr = 0
+              continue
+          if buf_ptr < len(buf):
+            fcs.feed_byte(byte)
+            buf[buf_ptr] = byte
+            buf_ptr += 1
+      self._reader_stopped_event.set()
+    except serial.SerialException:
+      logging.info('TashTalk device stopped responding to reads. Unplugged?')
+      self._reader_stopped_event.set()
+      self.stop()
   
   def _writer_run(self):
-    self._writer_started_event.set()
-    while True:
-      try:
-        item = self._writer_queue.get(block=True, timeout=self.SERIAL_TIMEOUT)
-      except Empty:
-        item = None
-      #TODO make sure OS queue isn't overflowing?
-      self._serial_obj.cancel_read()
-      if item is self._writer_stop_flag: break
-      if item: self._serial_obj.write(item)
-    self._writer_stopped_event.set()
+    try:
+      self._writer_started_event.set()
+      while True:
+        try:
+          item = self._writer_queue.get(block=True, timeout=self.SERIAL_TIMEOUT)
+        except Empty:
+          item = None
+        #TODO make sure OS queue isn't overflowing?
+        self._serial_obj.cancel_read()
+        if item is self._writer_stop_flag: break
+        if item: self._serial_obj.write(item)
+      self._writer_stopped_event.set()
+    except serial.SerialException:
+      logging.info('TashTalk device stopped responding to writes. Unplugged?')
+      self._writer_stopped_event.set()
+      self.stop()
