@@ -3,6 +3,7 @@
 from fcntl import ioctl
 import os
 from queue import Queue
+import re
 from select import select
 import struct
 from threading import Thread, Event
@@ -10,14 +11,10 @@ from threading import Thread, Event
 from . import EtherTalkPort
 
 
-class TapPort(EtherTalkPort):
-  '''Port driver for EtherTalk using TUN/TAP.'''
+class AbstractTapPort(EtherTalkPort):
+  '''Tap port driver superclass for EtherTalk.  Do not instantiate.'''
   
   SELECT_TIMEOUT = 0.25  # seconds
-  
-  TUNSETIFF = 0x400454CA
-  IFF_TAP = 0x0002
-  IFF_NO_PI = 0x1000
   
   def __init__(self, tap_name, hw_addr, **kwargs):
     super().__init__(hw_addr, **kwargs)
@@ -40,9 +37,7 @@ class TapPort(EtherTalkPort):
   __repr__ = short_str
   
   def start(self, router):
-    self._fp = os.open('/dev/net/tun', os.O_RDWR)
-    ioctl(self._fp, self.TUNSETIFF, struct.pack('16sH22x', self._tap_name.encode('ascii') or b'', self.IFF_TAP | self.IFF_NO_PI))
-    super().start(router)
+    if self._fp is None: raise NotImplementedError('subclass needs to open a file pointer')
     self._reader_thread = Thread(target=self._reader_run)
     self._reader_thread.start()
     self._writer_thread = Thread(target=self._writer_run)
@@ -77,3 +72,28 @@ class TapPort(EtherTalkPort):
       select((), (self._fp,), ())
       os.write(self._fp, frame_data)
     self._writer_stopped_event.set()
+
+
+class LinuxTapPort(AbstractTapPort):
+  '''Port driver for EtherTalk using TUN/TAP on Linux.'''
+  
+  TUNSETIFF = 0x400454CA
+  IFF_TAP = 0x0002
+  IFF_NO_PI = 0x1000
+  
+  def start(self, router):
+    self._fp = os.open('/dev/net/tun', os.O_RDWR)
+    ioctl(self._fp, self.TUNSETIFF, struct.pack('16sH22x', self._tap_name.encode('ascii') or b'', self.IFF_TAP | self.IFF_NO_PI))
+    super().start(router)
+
+
+class BsdTapPort(AbstractTapPort):
+  '''Port driver for EtherTalk using tap on BSD.'''
+  
+  REO_TAP_NAME = re.compile(r'^tap[0-9]+$')
+  
+  def start(self, router):
+    if not self.REO_TAP_NAME.match(self._tap_name): raise ValueError(f'invalid name {self._tap_name} for BSD tap')
+    if not os.path.exists(f'/dev/{self._tap_name}'): raise IOError(f'BSD tap {self._tap_name} must already exist at start time')
+    self._fp = os.open(f'/dev/{self._tap_name}', os.O_RDWR)
+    super().start(router)

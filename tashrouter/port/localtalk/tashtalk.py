@@ -105,7 +105,7 @@ class TashTalkPort(LocalTalkPort):
             buf_ptr += 1
       self._reader_stopped_event.set()
     except serial.SerialException:
-      logging.info('TashTalk device stopped responding to reads. Unplugged?')
+      logging.warning('TashTalk device stopped responding to reads. Unplugged?')
       self._reader_stopped_event.set()
       self.stop()
   
@@ -123,6 +123,6 @@ class TashTalkPort(LocalTalkPort):
         if item: self._serial_obj.write(item)
       self._writer_stopped_event.set()
     except serial.SerialException:
-      logging.info('TashTalk device stopped responding to writes. Unplugged?')
+      logging.warning('TashTalk device stopped responding to writes. Unplugged?')
       self._writer_stopped_event.set()
       self.stop()
