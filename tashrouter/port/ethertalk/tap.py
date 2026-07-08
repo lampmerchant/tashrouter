@@ -38,6 +38,7 @@ class AbstractTapPort(EtherTalkPort):
   
   def start(self, router):
     if self._fp is None: raise NotImplementedError('subclass needs to open a file pointer')
+    super().start(router)
     self._reader_thread = Thread(target=self._reader_run)
     self._reader_thread.start()
     self._writer_thread = Thread(target=self._writer_run)
