@@ -17,12 +17,12 @@ from ..service.zip.sending import ZipSendingService
 class Router:
   '''A router, a device which sends Datagrams to Ports and runs Services.'''
   
-  def __init__(self, short_str, ports):
+  def __init__(self, short_str, ports, route_lkup_replies=False):
     self._short_str = short_str
     self.ports = ports
     self._services = (
       (EchoService.ECHO_SAS, EchoService()),
-      (NameInformationService.NBP_SAS, NameInformationService()),
+      (NameInformationService.NBP_SAS, NameInformationService(route_lkup_replies)),
       (None, RoutingTableAgingService()),
       (RtmpRespondingService.RTMP_SAS, RtmpRespondingService()),
       (None, RtmpSendingService()),

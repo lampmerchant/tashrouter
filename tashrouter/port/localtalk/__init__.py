@@ -148,25 +148,41 @@ class LocalTalkPort(Port):
     '''Called when a LocalTalk node ID is settled on.  May be overridden by subclass.'''
     self.node = node
   
+  def _send_frame_with_short_header(self, destination_node, datagram):
+    self.send_frame(bytes((destination_node, self.node, self.LLAP_APPLETALK_SHORT_HEADER)) + datagram.as_short_header_bytes())
+  
+  def _send_frame_with_long_header(self, destination_node, datagram):
+    self.send_frame(bytes((destination_node, self.node, self.LLAP_APPLETALK_LONG_HEADER))
+                    + datagram.as_long_header_bytes(calculate_checksum=self._calculate_checksums))
+  
   def unicast(self, network, node, datagram):
     if network not in (0, self.network): return
     if self.node == 0: return
     log_datagram_unicast(network, node, datagram, self)
-    if datagram.destination_network == datagram.source_network and datagram.destination_network in (0, self.network):
-      self.send_frame(bytes((node, self.node, self.LLAP_APPLETALK_SHORT_HEADER)) + datagram.as_short_header_bytes())
+    if datagram.header_type == Datagram.HEADER_TYPE_SHORT:
+      self._send_frame_with_short_header(node, datagram)
+    elif datagram.header_type == Datagram.HEADER_TYPE_LONG:
+      self._send_frame_with_long_header(node, datagram)
+    elif datagram.destination_network == datagram.source_network and datagram.destination_network in (0, self.network):
+      self._send_frame_with_short_header(node, datagram)
     else:
-      self.send_frame(bytes((node, self.node, self.LLAP_APPLETALK_LONG_HEADER))
-                      + datagram.as_long_header_bytes(calculate_checksum=self._calculate_checksums))
+      self._send_frame_with_long_header(node, datagram)
   
   def broadcast(self, datagram):
     if self.node == 0: return
     log_datagram_broadcast(datagram, self)
-    self.send_frame(bytes((0xFF, self.node, self.LLAP_APPLETALK_SHORT_HEADER)) + datagram.as_short_header_bytes())
+    if datagram.header_type == Datagram.HEADER_TYPE_LONG:
+      self._send_frame_with_long_header(0xFF, datagram)
+    else:
+      self._send_frame_with_short_header(0xFF, datagram)
   
   def multicast(self, zone_name, datagram):
     if self.node == 0: return
     log_datagram_multicast(zone_name, datagram, self)
-    self.send_frame(bytes((0xFF, self.node, self.LLAP_APPLETALK_SHORT_HEADER)) + datagram.as_short_header_bytes())
+    if datagram.header_type == Datagram.HEADER_TYPE_LONG:
+      self._send_frame_with_long_header(0xFF, datagram)
+    else:
+      self._send_frame_with_short_header(0xFF, datagram)
   
   def _set_network(self, network):
     logging.info('%s assigned network number %d', str(self), network)

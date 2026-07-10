@@ -19,6 +19,10 @@ class Datagram:
   
   MAX_DATA_LENGTH = 586
   
+  HEADER_TYPE_UNSPECIFIED = 0
+  HEADER_TYPE_SHORT = 1
+  HEADER_TYPE_LONG = 2
+  
   hop_count: int
   destination_network: int
   source_network: int
@@ -28,6 +32,7 @@ class Datagram:
   source_socket: int
   ddp_type: int
   data: bytes
+  header_type: int = HEADER_TYPE_UNSPECIFIED
   
   @classmethod
   def from_long_header_bytes(cls, data, verify_checksum=True):
@@ -54,7 +59,8 @@ class Datagram:
                destination_socket=destination_socket,
                source_socket=source_socket,
                ddp_type=ddp_type,
-               data=data[13:])
+               data=data[13:],
+               header_type=cls.HEADER_TYPE_LONG)
   
   @classmethod
   def from_short_header_bytes(cls, destination_node, source_node, data):
@@ -75,7 +81,8 @@ class Datagram:
                destination_socket=destination_socket,
                source_socket=source_socket,
                ddp_type=ddp_type,
-               data=data[5:])
+               data=data[5:],
+               header_type=cls.HEADER_TYPE_SHORT)
   
   def _check_ranges(self):
     '''Check that the Datagram's parameters are in range, raise ValueError if not.'''
