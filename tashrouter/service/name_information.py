@@ -331,8 +331,9 @@ class NameInformationService(Service):
                                     destination_socket=socket,
                                     source_socket=nbp_tuple.socket,
                                     ddp_type=self.NBP_DDP_TYPE,
-                                    data=struct.pack('>BB', (self.NBP_CTRL_LKUP_REPLY << 4) | 1, nbp_id)
-                                    + nbp_tuple.as_bytes()), originating=False)
+                                    data=struct.pack('>BB', (self.NBP_CTRL_LKUP_REPLY << 4) | 1, nbp_id) + nbp_tuple.as_bytes(),
+                                    header_type=Datagram.HEADER_TYPE_LONG),
+                           originating=False)  # header must be long since originating=False means hop count will be 1
     
     self._stopped_event.set()
   
