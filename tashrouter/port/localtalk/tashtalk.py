@@ -1,10 +1,10 @@
 '''Port that connects to LocalTalk via TashTalk on a serial port.'''
 
+import logging
 from queue import Queue, Empty
 from threading import Thread, Event
 
 import serial
-import logging
 
 from . import LocalTalkPort, FcsCalculator
 from ...netlog import log_localtalk_frame_inbound, log_localtalk_frame_outbound

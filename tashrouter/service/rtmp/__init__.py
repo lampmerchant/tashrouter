@@ -23,8 +23,6 @@ class RtmpService:
   def make_routing_table_datagram_data(self, router, port, split_horizon=True):
     '''Build Datagram data for the given Router's RoutingTable.'''
     
-    if 0 in (port.network_min, port.network_max): return
-
     binary_tuples = deque()
     this_net = None
     for entry, is_bad in router.routing_table.entries():

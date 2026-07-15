@@ -49,12 +49,18 @@ class NetLogger:
   def log_datagram_inbound(self, network, node, datagram, port):
     '''Log an inbound DDP Datagram.'''
     if not self._logging_on: return
-    self._log_str('in to %d.%d' % (network, node), port.short_str(), datagram_header(datagram), datagram.data)
+    if network == node == None:
+      self._log_str('in', port.short_str(), datagram_header(datagram), datagram.data)
+    else:
+      self._log_str('in to %d.%d' % (network, node), port.short_str(), datagram_header(datagram), datagram.data)
   
   def log_datagram_unicast(self, network, node, datagram, port):
     '''Log a unicast DDP Datagram.'''
     if not self._logging_on: return
-    self._log_str('out to %d.%d' % (network, node), port.short_str(), datagram_header(datagram), datagram.data)
+    if network == node == None:
+      self._log_str('out', port.short_str(), datagram_header(datagram), datagram.data)
+    else:
+      self._log_str('out to %d.%d' % (network, node), port.short_str(), datagram_header(datagram), datagram.data)
   
   def log_datagram_broadcast(self, datagram, port):
     '''Log a broadcast DDP Datagram.'''

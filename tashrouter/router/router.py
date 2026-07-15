@@ -69,6 +69,13 @@ class Router:
       port.stop()
     logging.info('all ports stopped!')
   
+  def any_network_node(self):
+    '''Return the network and node number of any port on this Router that has a nonzero one, if possible, else return 0, 0.'''
+    for port in self.ports:
+      if port.network and port.node: return port.network, port.node
+    else:
+      return 0, 0
+  
   def inbound(self, datagram, rx_port):
     '''Called by a Port when a Datagram comes in from that port.  The Datagram may be routed, delivered, both, or neither.'''
     
@@ -126,12 +133,16 @@ class Router:
     # you can't get there from here; discard the Datagram
     if entry is None: return
     
-    # if we're originating this datagram, we expect that its source network and node will be blank
+    # if we're originating this Datagram, we expect that its source network and node will be blank
     if originating:
-      # if for some reason the port is in the routing table but doesn't yet have a network and node, discard the Datagram
-      if entry.port.network == 0x0000 or entry.port.node == 0x00: return
-      # else, fill in its source network and node with those of the port it's coming from
-      datagram = datagram.copy(source_network=entry.port.network, source_node=entry.port.node)
+      # if the Port in the routing table has a network and node number associated with it, stamp them on the Datagram as source
+      if entry.port.network and entry.port.node:
+        datagram = datagram.copy(source_network=entry.port.network, source_node=entry.port.node)
+      # if not, the network and node number of any Port should suffice as a source
+      else:
+        source_network, source_node = self.any_network_node()
+        if source_network == source_node == 0: return  # no Port has a network and node number yet, so discard the Datagram
+        datagram = datagram.copy(source_network=source_network, source_node=source_node)
     else:
       # invalid values for source node, ports will refuse to send it on; discard the Datagram
       if datagram.source_node in (0x00, 0xFF): return
@@ -153,6 +164,28 @@ class Router:
     # the destination is connected to us directly; send the Datagram to its final destination
     else:
       entry.port.unicast(datagram.destination_network, datagram.destination_node, datagram)
+  
+  def send(self, datagram, port):
+    '''Send the given datagram from the given port.'''
+    
+    if port not in self.ports: raise KeyError('port %s is not known by %s, where did you get it?' % (str(port), str(self)))
+    
+    # if Datagram has no source network/node, make sure we fill those in before attempting to send it
+    if datagram.source_network == datagram.source_node == 0:
+      # if Port has no network/node number, try to get one from any Port on this Router that does
+      if port.network == port.node == 0:
+        source_network, source_node = self.any_network_node()
+        if source_network == source_node == 0: return  # no Port on this router has a network/node number
+        datagram = datagram.copy(source_network=source_network, source_node=source_node)
+      # prefer using the Port's own network/node number, however
+      else:
+        datagram = datagram.copy(source_network=port.network, source_node=port.node)
+    
+    # send the Datagram out of the desired Port
+    if datagram.destination_network == 0x0000 and datagram.destination_node == 0xFF:
+      port.broadcast(datagram)
+    else:
+      port.unicast(datagram.destination_network, datagram.destination_node, datagram)
   
   def reply(self, datagram, rx_port, ddp_type, data):
     '''Build and send a reply Datagram to the given Datagram coming in over the given Port with the given data.'''
