@@ -9,11 +9,19 @@ class Port:
   This class does not extend Thread because it may have multiple threads according to the implementer's design.
   '''
   
+  PORT_TYPE_NON_EXTENDED_NETWORK = 1
+  PORT_TYPE_EXTENDED_NETWORK = 2
+  PORT_TYPE_POINT_TO_POINT = 3
+  
   network: int
   node: int
   network_min: int
   network_max: int
-  extended_network: bool
+  port_type: int
+  
+  def is_appletalk_network(self):
+    '''Return True if the port is connected to an AppleTalk network, else False.'''
+    return True if self.port_type in (self.PORT_TYPE_NON_EXTENDED_NETWORK, self.PORT_TYPE_EXTENDED_NETWORK) else False
   
   def short_str(self):
     '''Return a short string representation of this Port.'''

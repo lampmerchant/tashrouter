@@ -79,7 +79,7 @@ class LocalTalkPort(Port):
       raise ValueError('seed_network and seed_zone_name must be provided or omitted together')
     self.network = self.network_min = self.network_max = seed_network
     self.node = 0
-    self.extended_network = False
+    self.port_type = self.PORT_TYPE_NON_EXTENDED_NETWORK
     self._router = None
     self._seed_zone_name = seed_zone_name
     self._respond_to_enq = respond_to_enq

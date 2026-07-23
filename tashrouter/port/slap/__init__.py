@@ -22,8 +22,7 @@ class SlapPort(Port):
   
   def __init__(self):
     self.network = self.node = self.network_min = self.network_max = 0
-    self.extended_network = False  #TODO not sure
-    self.is_point_to_point = True
+    self.port_type = self.PORT_TYPE_POINT_TO_POINT
     self._router = None
     self._escape = False
     self._hash = None

@@ -60,7 +60,7 @@ class EtherTalkPort(Port):
     self.network_max = seed_network_max
     self.network = 0
     self.node = 0
-    self.extended_network = True
+    self.port_type = self.PORT_TYPE_EXTENDED_NETWORK
     self._hw_addr = hw_addr
     self._seed_zone_names = seed_zone_names
     self._desired_network = 0

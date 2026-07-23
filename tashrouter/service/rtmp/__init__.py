@@ -5,6 +5,7 @@ from itertools import chain
 import struct
 
 from ...datagram import Datagram
+from ...port import Port
 
 
 class RtmpService:
@@ -31,19 +32,24 @@ class RtmpService:
         binary_tuple = struct.pack('>HB', entry.network_min, distance & 0x1F)
       else:
         binary_tuple = struct.pack('>HBHB', entry.network_min, (distance & 0x1F) | 0x80, entry.network_max, self.RTMP_VERSION)
-      if port.extended_network and port.network_min == entry.network_min and port.network_max == entry.network_max:
+      if port.port_type == Port.PORT_TYPE_EXTENDED_NETWORK and (port.network_min == entry.network_min and
+                                                                port.network_max == entry.network_max):
         this_net = binary_tuple
       elif entry.port is port and split_horizon:
         pass  # split horizon
       else:
         binary_tuples.append(binary_tuple)
-    if port.extended_network and not this_net: raise ValueError("port's network range was not found in routing table")
-
-    if port.extended_network:
+    if port.port_type == Port.PORT_TYPE_EXTENDED_NETWORK and not this_net:
+      raise ValueError("extended network port's network range not found in routing table and we need it to send routing table data")
+    
+    if port.port_type == Port.PORT_TYPE_EXTENDED_NETWORK:
       rtmp_datagram_header = struct.pack('>HBB', port.network, 8, port.node) + this_net
-    else:
+    elif port.port_type == Port.PORT_TYPE_NON_EXTENDED_NETWORK:
       rtmp_datagram_header = struct.pack('>HBBHB', port.network, 8, port.node, 0, self.RTMP_VERSION)
-
+    elif port.port_type == Port.PORT_TYPE_POINT_TO_POINT:
+      #TODO not sure what header format p2p ports use for their RTMP tuples, assuming here that it's the nonextended net variety
+      rtmp_datagram_header = struct.pack('>HBHB', 0, 0, 0, self.RTMP_VERSION)
+    
     next_datagram_data = deque((rtmp_datagram_header,))
     next_datagram_data_length = len(rtmp_datagram_header)
     for binary_tuple in chain(binary_tuples, (None,)):

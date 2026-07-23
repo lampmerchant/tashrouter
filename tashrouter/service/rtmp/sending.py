@@ -39,6 +39,8 @@ class RtmpSendingService(Service, RtmpService):
         item = None
       if item is self.stop_flag: break
       for port in router.ports:
+        # IA 5-17: if we don't know the network number range for an AppleTalk port, don't send routing table through that port
+        if 0 in (port.network_min, port.network_max) and port.is_appletalk_network(): continue
         for datagram_data in self.make_routing_table_datagram_data(router, port):
           router.send(Datagram(hop_count=0,
                                destination_network=0x0000,
