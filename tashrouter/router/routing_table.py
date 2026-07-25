@@ -6,6 +6,7 @@ import logging
 from threading import Lock
 
 from ..port import Port
+from ..port.appletalk import AppleTalkPort
 
 
 @dataclasses.dataclass(frozen=True)
@@ -122,7 +123,8 @@ class RoutingTable:
   
   def set_port_range(self, port, network_min, network_max):
     '''Set the network range for a given port, unsetting any previous entries in the table that defined it.'''
-    if not port.is_appletalk_network(): raise ValueError("can't set port range for a port not connected to an AppleTalk network")
+    if not isinstance(port, AppleTalkPort):
+      raise ValueError("can't set port range for a port not connected to an AppleTalk network")
     entries_to_delete = set()
     networks_to_delete = deque()
     with self._lock:
@@ -138,7 +140,7 @@ class RoutingTable:
         except ValueError as e:
           logging.warning("%s couldn't remove networks from zone information table: %s", str(self._router), e.args[0])
       for network in networks_to_delete: self._entry_by_network.pop(network)
-      entry = RoutingTableEntry(extended_network=True if port.port_type == Port.PORT_TYPE_EXTENDED_NETWORK else False,
+      entry = RoutingTableEntry(extended_network=port.extended_network,
                                 network_min=network_min,
                                 network_max=network_max,
                                 distance=0,

@@ -9,7 +9,7 @@ from threading import Thread, Event
 import time
 
 from . import LocalTalkPort
-from ...netlog import log_localtalk_frame_inbound, log_localtalk_frame_outbound
+from ....netlog import log_localtalk_frame_inbound, log_localtalk_frame_outbound
 
 
 class LtoudpPort(LocalTalkPort):

@@ -7,14 +7,14 @@ import struct
 from threading import Thread, Event, Lock
 import time
 
-from .. import Port
-from ...datagram import Datagram, ddp_checksum
-from ...netlog import log_datagram_inbound, log_datagram_unicast, log_datagram_broadcast, log_datagram_multicast
-from ...netlog import log_ethernet_frame_inbound, log_ethernet_frame_outbound
-from ...router.zone_information_table import ucase
+from .. import AppleTalkPort
+from ....datagram import Datagram, ddp_checksum
+from ....netlog import log_datagram_inbound, log_datagram_unicast, log_datagram_broadcast, log_datagram_multicast
+from ....netlog import log_ethernet_frame_inbound, log_ethernet_frame_outbound
+from ....router.zone_information_table import ucase
 
 
-class EtherTalkPort(Port):
+class EtherTalkPort(AppleTalkPort):
   '''Superclass for EtherTalk Ports.'''
   
   IEEE_802_2_SAP_OTHER = 0xAA
@@ -56,11 +56,11 @@ class EtherTalkPort(Port):
       raise ValueError('seed_network_min and seed_network_max must be provided or omitted together')
     if seed_network_min and not seed_zone_names or seed_zone_names and not seed_network_min:
       raise ValueError('seed_network_min/max and seed_zone_names must be provided or omitted together')
+    self.extended_network = True
     self.network_min = seed_network_min
     self.network_max = seed_network_max
     self.network = 0
     self.node = 0
-    self.port_type = self.PORT_TYPE_EXTENDED_NETWORK
     self._hw_addr = hw_addr
     self._seed_zone_names = seed_zone_names
     self._desired_network = 0

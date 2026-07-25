@@ -242,7 +242,7 @@ class NameInformationService(Service):
         # if zone is *, try to sub in the zone name associated with the nonextended network whence the BrRq comes
         if zone_field == b'*':
           # IA 7-11: BrRqs from extended networks must provide zone name
-          if rx_port.port_type == Port.PORT_TYPE_EXTENDED_NETWORK: continue
+          if rx_port.extended_network: continue
           if rx_port.network:
             entry, _ = router.routing_table.get_by_network(rx_port.network)
             if entry:

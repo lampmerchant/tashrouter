@@ -51,9 +51,9 @@ import signal
 import sys
 
 from tashrouter.netlog import set_log_str_func
-from tashrouter.port.ethertalk.macvtap import MacvtapPort
-from tashrouter.port.localtalk.ltoudp import LtoudpPort
-from tashrouter.port.localtalk.tashtalk import TashTalkPort
+from tashrouter.port.appletalk.ethertalk.macvtap import MacvtapPort
+from tashrouter.port.appletalk.localtalk.ltoudp import LtoudpPort
+from tashrouter.port.appletalk.localtalk.tashtalk import TashTalkPort
 from tashrouter.router.router import Router
 
 

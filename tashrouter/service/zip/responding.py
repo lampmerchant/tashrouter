@@ -10,6 +10,7 @@ from threading import Thread, Event
 from . import ZipService
 from .. import Service
 from ...datagram import Datagram
+from ...port.appletalk import AppleTalkPort
 from ...router.zone_information_table import ucase
 
 
@@ -205,11 +206,17 @@ class ZipRespondingService(Service, ZipService):
                                                                   num_zones) + b''.join(zone_list))
   
   def _run(self, router):
+    
     self.started_event.set()
     while True:
+      
       item = self.queue.get()
       if item is self.stop_flag: break
       datagram, rx_port = item
+      
+      # ZIP is only for use by ports connected to AppleTalk networks, other ports should use other protocols
+      if not isinstance(rx_port, AppleTalkPort): continue
+      
       if datagram.ddp_type == self.ZIP_DDP_TYPE:
         if not datagram.data: continue
         if datagram.data[0] in (self.ZIP_FUNC_REPLY, self.ZIP_FUNC_EXT_REPLY):
@@ -228,6 +235,7 @@ class ZipRespondingService(Service, ZipService):
           self._get_zone_list(router, datagram, rx_port, local=False)
         elif func == self.ZIP_ATP_FUNC_GETLOCALZONES:
           self._get_zone_list(router, datagram, rx_port, local=True)
+    
     self.stopped_event.set()
   
   def inbound(self, datagram, rx_port):

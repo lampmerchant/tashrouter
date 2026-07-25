@@ -8,6 +8,7 @@ from threading import Thread, Event
 from . import RtmpService
 from .. import Service
 from ...port import Port
+from ...port.appletalk import AppleTalkPort
 from ...router.routing_table import RoutingTableEntry
 
 
@@ -42,6 +43,9 @@ class RtmpRespondingService(Service, RtmpService):
       if item is self.stop_flag: break
       datagram, rx_port = item
       
+      # RTMP is only for use by ports connected to AppleTalk networks, other ports should use other protocols
+      if not isinstance(rx_port, AppleTalkPort): continue
+      
       if datagram.ddp_type == self.RTMP_DDP_TYPE_DATA:
         
         # process header
@@ -52,6 +56,7 @@ class RtmpRespondingService(Service, RtmpService):
           sender_node = datagram.data[3]
           data = datagram.data[4:]
         elif id_length == 0:
+          #TODO would an AppleTalk network ever have an ID length of something other than 8?
           sender_node = 0
           data = datagram.data[3:]
         else:
@@ -101,11 +106,11 @@ class RtmpRespondingService(Service, RtmpService):
         if tuple_violation: continue  # invalid, see above for reason
         
         # if this Port doesn't know its network range yet, accept that this is from the network's seed router
-        if rx_port.port_type == Port.PORT_TYPE_EXTENDED_NETWORK:
+        if rx_port.extended_network:
           #TODO is this how an extended network port should determine its network range?
           if rx_port.network_min == rx_port.network_max == 0 and None not in (sender_network_min, sender_network_max):
             rx_port.set_network_range(sender_network_min, sender_network_max)
-        elif rx_port.port_type == Port.PORT_TYPE_NON_EXTENDED_NETWORK:
+        else:
           if rx_port.network_min == rx_port.network_max == 0 and sender_network:
             rx_port.set_network_range(sender_network, sender_network)
         
@@ -130,20 +135,19 @@ class RtmpRespondingService(Service, RtmpService):
         
       elif datagram.data[0] == self.RTMP_FUNC_REQUEST:
         
-        # IA 5-23: no case for if port is not connected to an AppleTalk network or its port range contains 0
-        if not rx_port.is_appletalk_network(): continue
+        # IA 5-23: no case for if port range contains 0
         if 0 in (rx_port.network_min, rx_port.network_max): continue
         
         if datagram.hop_count != 0: continue  # we have to send responses out of the same port they came in, no routing
         response_data = struct.pack('>HBB', rx_port.network, 8, rx_port.node)
-        if rx_port.port_type == Port.PORT_TYPE_EXTENDED_NETWORK:
+        if rx_port.extended_network:
           response_data += struct.pack('>HBHB', rx_port.network_min, 0x80, rx_port.network_max, self.RTMP_VERSION)
         router.reply(datagram, rx_port, self.RTMP_DDP_TYPE_DATA, response_data)
         
       elif datagram.data[0] in (self.RTMP_FUNC_RDR_SPLIT_HORIZON, self.RTMP_FUNC_RDR_NO_SPLIT_HORIZON):
         
-        # IA 5-17: if we don't know the network number range for an AppleTalk port, don't send routing table through that port
-        if 0 in (rx_port.network_min, rx_port.network_max) and rx_port.is_appletalk_network(): continue
+        # IA 5-17: if we don't know the network number range, don't send routing table through that port
+        if 0 in (rx_port.network_min, rx_port.network_max): continue
         
         split_horizon = True if datagram.data[0] == self.RTMP_FUNC_RDR_SPLIT_HORIZON else False
         for datagram_data in self.make_routing_table_datagram_data(router, rx_port, split_horizon):

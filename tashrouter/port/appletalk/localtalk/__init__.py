@@ -5,9 +5,9 @@ import random
 import struct
 from threading import Thread, Event, Lock
 
-from .. import Port
-from ...datagram import Datagram
-from ...netlog import log_datagram_inbound, log_datagram_unicast, log_datagram_broadcast, log_datagram_multicast
+from .. import AppleTalkPort
+from ....datagram import Datagram
+from ....netlog import log_datagram_inbound, log_datagram_unicast, log_datagram_broadcast, log_datagram_multicast
 
 
 class FcsCalculator:
@@ -62,7 +62,7 @@ class FcsCalculator:
     return True if self.reg == 61624 else False  # this is the binary constant on B-22 of Inside Appletalk, but backwards
 
 
-class LocalTalkPort(Port):
+class LocalTalkPort(AppleTalkPort):
   '''Superclass for LocalTalk Ports.'''
   
   ENQ_INTERVAL = 0.25  # seconds
@@ -77,9 +77,9 @@ class LocalTalkPort(Port):
                calculate_checksums=True):
     if seed_network and not seed_zone_name or seed_zone_name and not seed_network:
       raise ValueError('seed_network and seed_zone_name must be provided or omitted together')
+    self.extended_network = False
     self.network = self.network_min = self.network_max = seed_network
     self.node = 0
-    self.port_type = self.PORT_TYPE_NON_EXTENDED_NETWORK
     self._router = None
     self._seed_zone_name = seed_zone_name
     self._respond_to_enq = respond_to_enq

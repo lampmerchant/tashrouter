@@ -7,7 +7,7 @@ from threading import Thread, Event
 import serial
 
 from . import LocalTalkPort, FcsCalculator
-from ...netlog import log_localtalk_frame_inbound, log_localtalk_frame_outbound
+from ....netlog import log_localtalk_frame_inbound, log_localtalk_frame_outbound
 
 
 class TashTalkPort(LocalTalkPort):

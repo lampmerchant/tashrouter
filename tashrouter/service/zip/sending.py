@@ -9,6 +9,7 @@ from threading import Thread, Event
 from . import ZipService
 from .. import Service
 from ...datagram import Datagram
+from ...port.appletalk import AppleTalkPort
 
 
 class ZipSendingService(Service, ZipService):
@@ -41,12 +42,18 @@ class ZipSendingService(Service, ZipService):
       if self.stop_requested_event.wait(timeout=self.timeout): break
       
       queries = {}  # (port, network, node) -> network_mins
+      
       for entry in router.routing_table:
+        
+        # ZIP is only for use by ports connected to AppleTalk networks, other ports should use other protocols
+        if not isinstance(entry.port, AppleTalkPort): continue
+        
         try:
           if next(iter(router.zone_information_table.zones_in_network_range(entry.network_min, entry.network_max)), None): continue
         except ValueError as e:
           logging.warning('%s apparent disjoin between routing table and zone information table: %s', router, e.args[0])
           continue
+        
         if entry.distance == 0:
           key = (entry.port, 0x0000, 0xFF)
         else:

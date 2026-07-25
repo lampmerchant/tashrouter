@@ -4,7 +4,7 @@ from collections import deque
 from threading import Lock
 
 from . import LocalTalkPort
-from ...netlog import log_localtalk_frame_inbound, log_localtalk_frame_outbound
+from ....netlog import log_localtalk_frame_inbound, log_localtalk_frame_outbound
 
 
 class VirtualLocalTalkPort(LocalTalkPort):
